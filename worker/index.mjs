@@ -9,8 +9,9 @@ async function load(env){
  if(!row){const state=freshState();state.settings.workbook_path='No workbook uploaded';state.price_job={...state.price_job,attempted_at:now()};await env.DB.prepare('INSERT OR IGNORE INTO vault (id,revision,payload) VALUES (1,0,?)').bind(JSON.stringify(state)).run();row=await env.DB.prepare('SELECT revision,payload FROM vault WHERE id=1').first();}
  const s=JSON.parse(row.payload);
  // Optional private bootstrap data is a runtime secret, never source or browser data.
- if(env.INITIAL_INVENTORY_SNAPSHOT&&!s.last_import&&!s.holdings.length){
-  const bytes=Uint8Array.from(atob(env.INITIAL_INVENTORY_SNAPSHOT),c=>c.charCodeAt(0));
+ const initialSnapshot=env.INITIAL_INVENTORY_SNAPSHOT||Array.from({length:16},(_,i)=>env['INITIAL_INVENTORY_SNAPSHOT_'+i]||'').join('');
+ if(initialSnapshot&&!s.last_import&&!s.holdings.length){
+  const bytes=Uint8Array.from(atob(initialSnapshot),c=>c.charCodeAt(0));
   const text=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
   if(text.length>1200000)throw Error('Initial inventory exceeds the supported snapshot size.');
   const p=JSON.parse(text);if(!Array.isArray(p.holdings)||!Array.isArray(p.issues)||typeof p.fingerprint!=='string')throw Error('Initial inventory snapshot is invalid.');
@@ -19,7 +20,8 @@ async function load(env){
   await env.BUCKET.put('initial/import-snapshot.json',text,{httpMetadata:{contentType:'application/json'}});
   applySnapshot(s,p,id);s.history=[{id,created_at:s.last_import.created_at,source:p.source,status:'applied'}];
   await env.DB.prepare('INSERT OR IGNORE INTO imports (id,fingerprint,created_at,source,status,payload) VALUES (?,?,?,?,?,?)').bind(id,p.fingerprint,s.last_import.created_at,p.source,'initial',text).run();
-  await save(env,s,row.revision);return {s,revision:row.revision+1};
+  try {await save(env,s,row.revision);return {s,revision:row.revision+1};}
+  catch(e){const latest=await env.DB.prepare('SELECT revision,payload FROM vault WHERE id=1').first();const accepted=JSON.parse(latest.payload);if(accepted.last_import)return {s:accepted,revision:latest.revision};throw e;}
  }
  return {s,revision:row.revision};
 }
