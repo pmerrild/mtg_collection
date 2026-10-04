@@ -462,3 +462,113 @@ test("Advanced saved views and selected TXT/CSV exports share filter semantics; 
   );
   assert.equal(state().saved_filters.length, 1);
 });
+
+test("Bulk undo restores exact prior location/keep values and refuses later writes, reuse, expiry, or missing tokens", async () => {
+  reset();
+  const key = (await good("/collection"))[0].key;
+  const before = JSON.stringify(state().holdings);
+  let result = await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "location",
+    location: "New binder",
+  });
+  assert.equal(result.undo.revision, revision());
+  assert.equal(state().locations[key], "New binder");
+  await good(
+    "/collection/bulk/undo",
+    "POST",
+    { token: result.undo.token },
+    result.undo.revision,
+  );
+  assert.equal(Object.hasOwn(state().locations, key), false);
+  assert.equal(
+    (
+      await request("/collection/bulk/undo", "POST", {
+        token: result.undo.token,
+      })
+    ).status,
+    400,
+  );
+  await good("/locations", "PATCH", { key, location: "Original binder" });
+  result = await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "location",
+    location: "",
+  });
+  await good(
+    "/collection/bulk/undo",
+    "POST",
+    { token: result.undo.token },
+    result.undo.revision,
+  );
+  assert.equal(state().locations[key], "Original binder");
+  result = await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "keep",
+    keep: 4,
+  });
+  await good(
+    "/collection/bulk/undo",
+    "POST",
+    { token: result.undo.token },
+    result.undo.revision,
+  );
+  assert.equal(Object.hasOwn(state().keep_preferences, key), false);
+  assert.equal((await good("/collection"))[0].keep, 1);
+  await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "keep",
+    keep: 0,
+  });
+  result = await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "keep",
+    keep: 3,
+  });
+  await good(
+    "/collection/bulk/undo",
+    "POST",
+    { token: result.undo.token },
+    result.undo.revision,
+  );
+  assert.equal(state().keep_preferences[key], 0);
+  result = await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "location",
+    location: "Intermediate",
+  });
+  await good("/locations", "PATCH", { key, location: "Later edit" });
+  assert.equal(
+    (
+      await request("/collection/bulk/undo", "POST", {
+        token: result.undo.token,
+      })
+    ).status,
+    409,
+  );
+  assert.equal(state().locations[key], "Later edit");
+  result = await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "keep",
+    keep: 2,
+  });
+  const stored = blobs.get("bulk-undo/" + result.undo.token + ".json");
+  const expired = JSON.parse(stored.value);
+  expired.expires = Date.now() - 1;
+  stored.value = JSON.stringify(expired);
+  assert.equal(
+    (
+      await request("/collection/bulk/undo", "POST", {
+        token: result.undo.token,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(state().keep_preferences[key], 2);
+  assert.equal(
+    (await request("/collection/bulk/undo", "POST", { token: "invalid" }))
+      .status,
+    400,
+  );
+  assert.equal(JSON.stringify(state().holdings), before);
+});

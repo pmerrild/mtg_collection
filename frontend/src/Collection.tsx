@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   FileSpreadsheet,
-  Grid2X2,
   Layers3,
-  List,
   RefreshCw,
   Search,
+  SlidersHorizontal,
+  Settings2,
 } from "lucide-react";
-import type { Card, ViewProps } from "./types";
+import type { BulkUndo, Card, ViewProps } from "./types";
 import { api, date, Dialog, Empty, money, Pagination, PriceState } from "./ui";
 import {
   filterDefaults as defaults,
@@ -21,6 +21,16 @@ import {
   FilterChips,
   BulkCollectionDialog,
 } from "./CollectionTools";
+import { usePreference } from "./theme";
+import {
+  CardIdentity,
+  CardTraits,
+  CollectionActions,
+  DisplayDialog,
+  displayDefaults,
+  MatchBadge,
+  validateDisplay,
+} from "./CollectionChrome";
 const readFilters = () =>
   normalizeFilters(
     Object.fromEntries(new URLSearchParams(location.hash.split("?")[1] || "")),
@@ -30,21 +40,49 @@ function CardDetails({
   state,
   run,
   close,
-}: ViewProps & { card: Card; close: () => void }) {
+  position,
+  count,
+  navigate,
+  revision,
+}: ViewProps & {
+  card: Card;
+  close: () => void;
+  position: number;
+  count: number;
+  navigate: (step: number) => void;
+  revision: number;
+}) {
   const [face, setFace] = useState(0),
     [location, setLocation] = useState(card.location),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
-  const [expected] = useState(state.revision),
+  const [expected] = useState(revision),
     [savedLocation, setSavedLocation] = useState(card.location);
   const image = card.image_faces.length
     ? card.image_faces[face]?.url
     : card.image_url;
   const dirty = location !== savedLocation;
   const requestClose = () => {
+    if (saving) return;
     if (dirty && !confirm("Discard the unsaved location change?")) return;
     close();
   };
+  useEffect(() => {
+    const guardNavigation = (event: Event) => {
+      if (saving) {
+        event.preventDefault();
+        return;
+      }
+      if (dirty) {
+        if (!confirm("Discard the unsaved location change?"))
+          event.preventDefault();
+        else close();
+      }
+    };
+    window.addEventListener("mtg-before-navigate", guardNavigation);
+    return () =>
+      window.removeEventListener("mtg-before-navigate", guardNavigation);
+  }, [dirty, saving]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (dirty) {
@@ -57,6 +95,34 @@ function CardDetails({
   }, [dirty]);
   return (
     <Dialog title={card.name} close={requestClose} wide>
+      <div className="printing-navigation">
+        <button
+          className="button secondary"
+          disabled={position === 0 || saving}
+          onClick={() => {
+            if (!dirty || confirm("Discard the unsaved location change?"))
+              navigate(-1);
+          }}
+        >
+          Previous result
+        </button>
+        <span aria-live="polite">
+          Result {position + 1} of {count}
+        </span>
+        <button
+          className="button secondary"
+          disabled={position === count - 1 || saving}
+          onClick={() => {
+            if (!dirty || confirm("Discard the unsaved location change?"))
+              navigate(1);
+          }}
+        >
+          Next result
+        </button>
+      </div>
+      <p className="hint">
+        Navigation follows the results captured when you opened details.
+      </p>
       <div className="card-details">
         <div className="card-art">
           {image ? (
@@ -209,11 +275,13 @@ export function Collection({
   openImport,
   exportList,
   review,
+  offerUndo,
 }: ViewProps & {
   collection: Card[];
   openImport: () => void;
   exportList: (p: Record<string, string>) => void;
   review: () => void;
+  offerUndo: (undo: BulkUndo | null) => void;
 }) {
   const [filters, setFilters] = useState<Filters>(() => {
       try {
@@ -222,16 +290,38 @@ export function Collection({
         return defaults;
       }
     }),
+    [draft, setDraft] = useState<Filters>(filters),
+    [panel, setPanel] = useState(false),
+    [displayOpen, setDisplayOpen] = useState(false),
+    [actionsOpen, setActionsOpen] = useState(false),
     [page, setPage] = useState(0),
-    [grid, setGrid] = useState(false),
-    [card, setCard] = useState<Card | null>(null),
+    [inspection, setInspection] = useState<{
+      cards: Card[];
+      index: number;
+      revision: number;
+    } | null>(null),
     [savingFilter, setSavingFilter] = useState(false),
     [filterName, setFilterName] = useState(""),
     [selected, setSelected] = useState<Set<string>>(new Set()),
     [bulkAction, setBulkAction] = useState("");
+  const [display, setDisplay] = usePreference(
+    "mtg-vault-display",
+    displayDefaults,
+    validateDisplay,
+  );
+  const searchRef = useRef<HTMLInputElement>(null);
   const update = (k: keyof Filters, v: string) =>
     setFilters((f) => ({ ...f, [k]: v }));
-  useEffect(() => setPage(0), [filters]);
+  const updateDraft = (k: keyof Filters, v: string) =>
+    setDraft((f) => ({ ...f, [k]: v }));
+  const openFilters = () => {
+    setDraft({ ...filters });
+    setPanel(true);
+  };
+  useEffect(() => {
+    setPage(0);
+    setSelected(new Set());
+  }, [filters]);
   useEffect(() => {
     const search = (e: Event) => update("q", (e as CustomEvent<string>).detail);
     const hash = () => {
@@ -242,11 +332,27 @@ export function Collection({
           setFilters(defaults);
         }
     };
+    const shortcut = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        e.key === "/" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !target.closest('input,textarea,select,[contenteditable="true"]') &&
+        !document.querySelector("dialog[open]")
+      ) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
     window.addEventListener("mtg-collection-search", search);
     window.addEventListener("hashchange", hash);
+    window.addEventListener("keydown", shortcut);
     return () => {
       window.removeEventListener("mtg-collection-search", search);
       window.removeEventListener("hashchange", hash);
+      window.removeEventListener("keydown", shortcut);
     };
   }, []);
   useEffect(() => {
@@ -262,21 +368,34 @@ export function Collection({
       "#collection" + (params.size ? "?" + params : ""),
     );
   }, [filters]);
-  // Filtering clears selection so bulk actions always apply to visible results.
-  useEffect(() => setSelected(new Set()), [filters]);
-  let filterError = "";
-  let filtered: Card[] = [];
+  let filterError = "",
+    draftError = "";
+  let filtered: Card[] = [],
+    preview: Card[] = [];
   try {
     filtered = filterCollection(collection, filters);
   } catch (e) {
     filterError = (e as Error).message;
   }
+  try {
+    preview = filterCollection(collection, draft);
+  } catch (e) {
+    draftError = (e as Error).message;
+  }
+  const card = inspection?.cards[inspection.index];
+  const openCard = (c: Card) =>
+    setInspection({
+      cards: [...filtered],
+      index: filtered.findIndex((row) => row.key === c.key),
+      revision: state.revision,
+    });
+  const selectAll = () => setSelected(new Set(filtered.map((c) => c.key)));
   const selectedCards = filtered.filter((c) => selected.has(c.key));
   const toggle = (key: string) =>
     setSelected((previous) => {
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
-      else next.add(key);
+      else if (next.size < 1000) next.add(key);
       return next;
     });
   const selection = (c: Card) => (
@@ -291,9 +410,38 @@ export function Collection({
     </label>
   );
   const exportParams = () => ({ kind: "collection", ...filters });
+  const exportSelected = () =>
+    exportList({
+      kind: "collection",
+      view: filters.view,
+      sort: filters.sort,
+      keys: JSON.stringify(selectedCards.map((c) => c.key)),
+    });
   const pages = Math.max(1, Math.ceil(filtered.length / 30)),
     currentPage = Math.min(page, pages - 1),
     rows = filtered.slice(currentPage * 30, (currentPage + 1) * 30);
+  const activeCount = Object.entries(filters).filter(
+    ([k, v]) =>
+      !["q", "sort", "view", "color_mode", "type_mode"].includes(k) &&
+      v !== defaults[k as keyof Filters],
+  ).length;
+  const columns = display.columns;
+  const candidates = (c: Card) => (
+    <small className="candidate-summary">
+      {c.tradeable} candidates · {c.target_protected} deck-protected · keep{" "}
+      {c.keep}
+    </small>
+  );
+  const reservations = (c: Card) =>
+    c.reservations.length ? (
+      c.reservations.map((r, i) => (
+        <small key={i}>
+          {r.quantity} {r.finish} · {r.name}
+        </small>
+      ))
+    ) : (
+      <span className="muted">Unreserved</span>
+    );
   return (
     <>
       <div className="page-heading collection-heading">
@@ -308,6 +456,7 @@ export function Collection({
         <div className="actions">
           <button
             className="button secondary"
+            disabled={!!filterError}
             onClick={() => exportList(exportParams())}
           >
             <ArrowDownToLine size={16} /> Export
@@ -317,7 +466,8 @@ export function Collection({
             disabled={busy}
             onClick={() => run(reload, "Saved collection reloaded")}
           >
-            <RefreshCw size={16} /> Reload collection
+            <RefreshCw size={16} className={busy ? "spin" : ""} />
+            {busy ? "Updating…" : "Reload collection"}
           </button>
           <button
             className="button primary"
@@ -332,6 +482,7 @@ export function Collection({
           <div className="actions">
             <button
               className="button secondary"
+              disabled={!!filterError}
               onClick={() => exportList(exportParams())}
             >
               Export
@@ -341,7 +492,7 @@ export function Collection({
               disabled={busy}
               onClick={() => run(reload, "Saved collection reloaded")}
             >
-              Reload collection
+              {busy ? "Updating…" : "Reload collection"}
             </button>
             <button
               className="button primary"
@@ -357,7 +508,7 @@ export function Collection({
         <summary>
           {state.summary.copies.toLocaleString()} known copies ·{" "}
           {state.summary.foil_copies} foil · {state.summary.unresolved}{" "}
-          unmatched printings
+          printings to check
         </summary>
         <div className="metrics">
           <div className="metric">
@@ -383,8 +534,7 @@ export function Collection({
             </strong>
             <small>
               {state.summary.priced_copies} / {state.summary.copies} copies
-              priced; {state.summary.copies - state.summary.priced_copies}{" "}
-              unpriced
+              priced
             </small>
           </div>
           <button className="metric review-metric" onClick={review}>
@@ -394,128 +544,57 @@ export function Collection({
           </button>
         </div>
       </details>
-      <section className="table-panel collection-panel">
-        <div className="table-toolbar">
-          <label className="search-field">
-            <Search size={18} />
-            <input
-              aria-label="Search collection"
-              placeholder="Search cards, sets, types, or locations"
-              value={filters.q}
-              onChange={(e) => update("q", e.target.value)}
-            />
-          </label>
-          <div className="actions">
-            <button
-              className="icon-button"
-              aria-label="List view"
-              aria-pressed={!grid}
-              onClick={() => setGrid(false)}
-            >
-              <List size={20} />
-            </button>
-            <button
-              className="icon-button"
-              aria-label="Artwork grid"
-              aria-pressed={grid}
-              onClick={() => setGrid(true)}
-            >
-              <Grid2X2 size={20} />
-            </button>
-            <select
-              aria-label="Sort collection"
-              value={filters.sort}
-              onChange={(e) => update("sort", e.target.value)}
-            >
-              <option value="name">Name</option>
-              <option value="quantity">Quantity</option>
-              <option value="value">Known value</option>
-              <option value="tradeable">Candidate quantity</option>
-            </select>
+      <section
+        className={`table-panel collection-panel density-${display.density}`}
+        aria-busy={busy}
+      >
+        <div className="collection-controls">
+          <div className="table-toolbar">
+            <label className="search-field">
+              <Search size={18} />
+              <input
+                ref={searchRef}
+                aria-label="Search collection"
+                placeholder="Search cards, sets, types, or locations"
+                maxLength={200}
+                value={filters.q}
+                onChange={(e) => update("q", e.target.value)}
+              />
+              <kbd aria-hidden="true">/</kbd>
+            </label>
+            <div className="collection-toolbar-actions">
+              <button
+                className={`button secondary ${activeCount ? "has-filters" : ""}`}
+                aria-haspopup="dialog"
+                onClick={openFilters}
+              >
+                <SlidersHorizontal size={16} />
+                Filters
+                {activeCount > 0 && (
+                  <span className="control-count">{activeCount}</span>
+                )}
+              </button>
+              <select
+                aria-label="Sort collection"
+                value={filters.sort}
+                onChange={(e) => update("sort", e.target.value)}
+              >
+                <option value="name">Name</option>
+                <option value="quantity">Quantity</option>
+                <option value="value">Known value</option>
+                <option value="tradeable">Candidate quantity</option>
+              </select>
+              <button
+                className="button secondary"
+                aria-haspopup="dialog"
+                onClick={() => setDisplayOpen(true)}
+              >
+                <Settings2 size={16} />
+                Display
+              </button>
+            </div>
           </div>
         </div>
-        <details className="filter-options">
-          <summary>Filters and saved views</summary>
-          <div className="mobile-view-controls actions">
-            <button
-              className="button secondary"
-              aria-pressed={!grid}
-              onClick={() => setGrid(false)}
-            >
-              List view
-            </button>
-            <button
-              className="button secondary"
-              aria-pressed={grid}
-              onClick={() => setGrid(true)}
-            >
-              Artwork grid
-            </button>
-            <select
-              aria-label="Sort collection on mobile"
-              value={filters.sort}
-              onChange={(e) => update("sort", e.target.value)}
-            >
-              <option value="name">Name</option>
-              <option value="quantity">Quantity</option>
-              <option value="value">Known value</option>
-              <option value="tradeable">Candidate quantity</option>
-            </select>
-          </div>
-          <CollectionFiltersPanel
-            filters={filters}
-            update={update}
-            collection={collection}
-            state={state}
-          />
-          <div className="saved-views">
-            {state.saved_filters.map((f) => (
-              <span key={f.id}>
-                <button
-                  className="button secondary small"
-                  onClick={() => setFilters(normalizeFilters(f.filters))}
-                >
-                  {f.name}
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`Delete saved view ${f.name}`}
-                  onClick={() => run(() => api(`/filters/${f.id}`, "DELETE"))}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            <button
-              className="text-button"
-              onClick={() => setSavingFilter(true)}
-            >
-              Save current filters
-            </button>
-          </div>
-          <div className="filter-done">
-            <button
-              className="text-button"
-              onClick={() => setFilters({ ...defaults, sort: filters.sort })}
-            >
-              Clear filters
-            </button>
-            <button
-              className="button primary small"
-              onClick={(e) => {
-                const details = e.currentTarget.closest("details");
-                if (details) details.open = false;
-                document
-                  .querySelector<HTMLInputElement>(
-                    '[aria-label="Search collection"]',
-                  )
-                  ?.focus();
-              }}
-            >
-              Show {filtered.length} printings
-            </button>
-          </div>
-        </details>
         <div className="collection-views" aria-label="Collection views">
           {[
             ["", "All cards"],
@@ -544,18 +623,22 @@ export function Collection({
           </p>
         )}
         {filters.view && (
-          <p className="trade-explanation">
-            Duplicates include the same card across printings. Trade candidates
-            keep at least one copy per printing by default and protect the union
-            of current reservations and copies allocated across all saved deck
-            targets, including inactive decks. An unfilled target protects every
-            copy of that card. Incomplete decklists can leave future needs
-            unprotected. Review finishes and physical locations before trading;
-            candidates are suggestions.
-            <br />
-            Use “Keep copies” below to set a minimum total. Trade exports
-            contain candidate quantities.
-          </p>
+          <details className="trade-explanation">
+            <summary>
+              {filters.view === "duplicates"
+                ? "How duplicate copies are counted"
+                : "How trade candidates are protected"}
+            </summary>
+            <p>
+              Duplicates include the same card across printings. Trade
+              candidates keep at least one copy per printing and protect current
+              reservations and allocation across all saved targets, including
+              inactive decks. An unfilled target protects every copy of that
+              card. Incomplete lists can leave future needs unprotected. Review
+              finishes and locations before trading. “Keep copies” sets a
+              minimum total; trade exports contain candidate quantities.
+            </p>
+          </details>
         )}
         <div className="bulk-toolbar">
           <label>
@@ -570,66 +653,42 @@ export function Collection({
                 setSelected((previous) => {
                   const next = new Set(previous);
                   for (const c of rows) {
-                    if (checked) next.add(c.key);
-                    else next.delete(c.key);
+                    if (checked && next.size < 1000) next.add(c.key);
+                    else if (!checked) next.delete(c.key);
                   }
                   return next;
                 });
               }}
-            />{" "}
+            />
             Select page
           </label>
-          <button
-            className="text-button"
-            disabled={!filtered.length || filtered.length > 1000}
-            onClick={() => setSelected(new Set(filtered.map((c) => c.key)))}
-          >
-            Select all {filtered.length} results
-          </button>
-          {selectedCards.length > 0 && (
+          {selectedCards.length ? (
             <>
-              <strong>{selectedCards.length} selected</strong>
+              <strong aria-live="polite">
+                {selectedCards.length} selected
+              </strong>
               <button
                 className="text-button"
                 onClick={() => setSelected(new Set())}
               >
-                Clear selection
+                Clear<span className="sr-only"> selection</span>
               </button>
               <button
-                className="button secondary small"
-                onClick={() =>
-                  exportList({
-                    kind: "collection",
-                    view: filters.view,
-                    sort: filters.sort,
-                    keys: JSON.stringify(selectedCards.map((c) => c.key)),
-                  })
-                }
+                className="button primary small"
+                aria-haspopup="dialog"
+                onClick={() => setActionsOpen(true)}
               >
-                Export selected
-              </button>
-              <button
-                className="button secondary small"
-                disabled={busy}
-                onClick={() => setBulkAction("location")}
-              >
-                Set location
-              </button>
-              <button
-                className="button secondary small"
-                disabled={busy}
-                onClick={() => setBulkAction("keep")}
-              >
-                Keep copies
-              </button>
-              <button
-                className="button secondary small"
-                disabled={busy}
-                onClick={() => setBulkAction("acquisition")}
-              >
-                Track wanted
+                Actions
               </button>
             </>
+          ) : (
+            <button
+              className="text-button"
+              disabled={!filtered.length || filtered.length > 1000}
+              onClick={selectAll}
+            >
+              Select all {filtered.length}
+            </button>
           )}
         </div>
         <div className="table-caption">
@@ -637,25 +696,24 @@ export function Collection({
             {filtered.length} printings ·{" "}
             {filtered.reduce((n, c) => n + c.quantity, 0)} owned copies
             {filters.view &&
-              ` · ${filtered.reduce((n, c) => n + c.tradeable, 0)} trade candidate copies`}
+              ` · ${filtered.reduce((n, c) => n + c.tradeable, 0)} candidate copies`}
+          </span>
+          <span className="selection-hint">
+            Filters and sorting clear selection.
           </span>
         </div>
-        {grid ? (
+        {display.grid ? (
           <div className="artwork-grid">
             {rows.map((c) => (
               <div className="selectable-artwork" key={c.key}>
                 {selection(c)}
-                <button
-                  className="artwork-card"
-                  key={c.key}
-                  onClick={() => setCard(c)}
-                >
+                <button className="artwork-card" onClick={() => openCard(c)}>
                   {c.image_url ? (
                     <img src={c.image_url} alt={c.name} loading="lazy" />
                   ) : (
                     <div className="art-placeholder">
                       <Layers3 />
-                      <span>Awaiting artwork</span>
+                      <span>No cached artwork</span>
                     </div>
                   )}
                   <strong>{c.name}</strong>
@@ -664,13 +722,9 @@ export function Collection({
                     {c.quantity} owned
                   </small>
                 </button>
-                {filters.view && (
-                  <small>
-                    {c.tradeable} candidates · {c.target_protected}{" "}
-                    deck-protected · keep {c.keep} · {c.identity_copies} across
-                    printings
-                  </small>
-                )}
+                <CardTraits card={c} />
+                <MatchBadge card={c} />
+                {filters.view && candidates(c)}
               </div>
             ))}
           </div>
@@ -683,12 +737,12 @@ export function Collection({
                     <th>
                       <span className="sr-only">Select</span>
                     </th>
-                    <th>Card / location</th>
+                    <th>Card{columns.location ? " / location" : ""}</th>
                     <th>Printing</th>
                     <th className="numeric">Owned</th>
-                    <th>Planned reservations</th>
-                    <th>Excel Deck labels</th>
-                    <th className="numeric">Known value</th>
+                    {columns.reservations && <th>Reservations</th>}
+                    {columns.labels && <th>Excel Deck labels</th>}
+                    {columns.value && <th className="numeric">Known value</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -696,66 +750,44 @@ export function Collection({
                     <tr key={c.key}>
                       <td>{selection(c)}</td>
                       <td>
-                        <button
-                          className="card-cell"
-                          onClick={() => setCard(c)}
-                        >
-                          <div className="card-thumb">
-                            {c.image_url ? (
-                              <img src={c.image_url} alt="" loading="lazy" />
-                            ) : (
-                              <Layers3 size={17} />
-                            )}
-                          </div>
-                          <span>
-                            <strong>{c.name}</strong>
-                            <small>{c.card_type}</small>
-                            <small>
-                              {c.location || "Location not recorded"}
-                            </small>
-                          </span>
-                        </button>
+                        <CardIdentity
+                          card={c}
+                          location={columns.location}
+                          open={() => openCard(c)}
+                        />
                       </td>
                       <td>
                         {c.set_code.toUpperCase()} #{c.collector_number}
+                        <MatchBadge card={c} />
                       </td>
                       <td className="numeric">
-                        <strong>{c.quantity}</strong>
-                        {filters.view && (
-                          <small>
-                            {c.tradeable} candidates · {c.target_protected}{" "}
-                            deck-protected · keep {c.keep} · {c.identity_copies}{" "}
-                            across printings
-                          </small>
-                        )}
+                        <strong className="owned-quantity">{c.quantity}</strong>
                         <small>
                           {c.nonfoil} nonfoil · {c.foil} foil
                         </small>
+                        {filters.view && candidates(c)}
                       </td>
-                      <td>
-                        {c.reservations.length ? (
-                          c.reservations.map((r, i) => (
-                            <small key={i}>
-                              {r.quantity} {r.finish} · {r.name}
-                            </small>
-                          ))
-                        ) : (
-                          <span className="muted">Unreserved</span>
-                        )}
-                      </td>
-                      <td>{c.decks.join(", ") || "No label"}</td>
-                      <td className="numeric">
-                        {money(c.value, state.settings.currency)}
-                        <PriceState
-                          status={c.price_state}
-                          refreshed={c.fetched_at}
-                        />
-                        {c.priced_copies < c.quantity && (
-                          <small>
-                            {c.quantity - c.priced_copies} unpriced copies
-                          </small>
-                        )}
-                      </td>
+                      {columns.reservations && <td>{reservations(c)}</td>}
+                      {columns.labels && (
+                        <td>{c.decks.join(", ") || "No label"}</td>
+                      )}
+                      {columns.value && (
+                        <td className="numeric">
+                          {money(c.value, state.settings.currency)}
+                          {c.match_status === "matched" && (
+                            <PriceState
+                              status={c.price_state}
+                              refreshed={c.fetched_at}
+                            />
+                          )}{" "}
+                          {c.priced_copies > 0 &&
+                            c.priced_copies < c.quantity && (
+                              <small>
+                                {c.quantity - c.priced_copies} unpriced copies
+                              </small>
+                            )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -767,39 +799,73 @@ export function Collection({
                   {selection(c)}
                   <button
                     className="mobile-card-row"
-                    key={c.key}
-                    onClick={() => setCard(c)}
+                    onClick={() => openCard(c)}
                   >
                     <strong>{c.name}</strong>
-                    {filters.view && (
-                      <small>
-                        {c.tradeable} candidates · {c.target_protected}{" "}
-                        deck-protected · keep {c.keep} · {c.identity_copies}{" "}
-                        across printings
+                    <span className="owned-quantity">{c.quantity} owned</span>
+                    <small className="printing-line">
+                      {c.set_code.toUpperCase()} #{c.collector_number} ·{" "}
+                      {c.nonfoil} nonfoil · {c.foil} foil
+                    </small>
+                    <CardTraits card={c} />
+                    {columns.location && (
+                      <small className="card-location" title={c.location}>
+                        {c.location || "Location not recorded"}
                       </small>
                     )}
-                    <span>
-                      {c.quantity} owned · {c.foil} foil
-                    </span>
-                    <small>
-                      {c.set_code.toUpperCase()} #{c.collector_number} ·{" "}
-                      {c.location || "Location not recorded"}
-                    </small>
-                    <small>
-                      {c.reserved} reserved · {c.quantity - c.reserved}{" "}
-                      unreserved
-                    </small>
-                    <span>{money(c.value, state.settings.currency)}</span>
-                    <PriceState status={c.price_state} />
+                    {columns.reservations && (
+                      <small>
+                        {c.reserved} reserved · {c.quantity - c.reserved}{" "}
+                        unreserved
+                      </small>
+                    )}
+                    {filters.view && candidates(c)}
+                    {columns.labels && (
+                      <small>
+                        {c.decks.join(", ") || "No Excel Deck label"}
+                      </small>
+                    )}
+                    {columns.value && (
+                      <span>{money(c.value, state.settings.currency)}</span>
+                    )}
+                    <MatchBadge card={c} />
+                    {columns.value && c.match_status === "matched" && (
+                      <PriceState status={c.price_state} />
+                    )}
                   </button>
                 </div>
               ))}
             </div>
           </>
         )}
-        {!rows.length && (
-          <Empty title="No matching cards">
-            <p>Change filters or import a saved workbook.</p>
+        {!rows.length && !filterError && (
+          <Empty
+            title={
+              collection.length
+                ? "No matching cards"
+                : "Your collection is empty"
+            }
+          >
+            {collection.length ? (
+              <>
+                <p>Try another search or remove filters.</p>
+                <button
+                  className="button secondary"
+                  onClick={() =>
+                    setFilters({ ...defaults, sort: filters.sort })
+                  }
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : (
+              <>
+                <p>Import your complete saved Input workbook to start.</p>
+                <button className="button primary" onClick={openImport}>
+                  Import saved workbook
+                </button>
+              </>
+            )}
           </Empty>
         )}
         <div className="table-footer">
@@ -807,23 +873,137 @@ export function Collection({
           <Pagination page={currentPage} pages={pages} setPage={setPage} />
         </div>
       </section>
+      {panel && (
+        <Dialog
+          title="Filters and saved views"
+          className="filter-dialog"
+          close={() => setPanel(false)}
+        >
+          <div className="filter-dialog-body">
+            <p className="hint">
+              Changes apply when you show results. Closing discards unapplied
+              filters.
+            </p>
+            <CollectionFiltersPanel
+              filters={draft}
+              update={updateDraft}
+              collection={collection}
+              state={state}
+            />
+            <h3>Saved views</h3>
+            <div className="saved-views">
+              {state.saved_filters.map((f) => (
+                <span key={f.id}>
+                  <button
+                    className="button secondary small"
+                    onClick={() => {
+                      setDraft(normalizeFilters(f.filters));
+                    }}
+                  >
+                    {f.name}
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label={`Delete saved view ${f.name}`}
+                    onClick={() => run(() => api(`/filters/${f.id}`, "DELETE"))}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <button
+                className="text-button"
+                disabled={!!draftError}
+                onClick={() => setSavingFilter(true)}
+              >
+                Save current filters
+              </button>
+            </div>
+            {selectedCards.length > 0 && (
+              <p className="hint">
+                Applying filters clears {selectedCards.length} selected
+                printings.
+              </p>
+            )}
+            {draftError && (
+              <p role="alert" className="notice danger">
+                {draftError}
+              </p>
+            )}
+          </div>
+          <div className="filter-dialog-footer">
+            <button
+              className="text-button"
+              onClick={() => setDraft({ ...defaults, sort: draft.sort })}
+            >
+              Reset filters
+            </button>
+            <div className="actions">
+              <button
+                className="button secondary"
+                onClick={() => setPanel(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="button primary"
+                disabled={!!draftError}
+                onClick={() => {
+                  setFilters(normalizeFilters(draft));
+                  setPanel(false);
+                }}
+              >
+                Show {preview.length} printings
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+      {displayOpen && (
+        <DisplayDialog
+          value={display}
+          setValue={setDisplay}
+          close={() => setDisplayOpen(false)}
+        />
+      )}
+      {actionsOpen && selectedCards.length > 0 && (
+        <CollectionActions
+          count={selectedCards.length}
+          resultCount={filtered.length}
+          selectAll={selectAll}
+          busy={busy}
+          exportSelected={exportSelected}
+          action={setBulkAction}
+          close={() => setActionsOpen(false)}
+        />
+      )}
       {bulkAction && selectedCards.length > 0 && (
         <BulkCollectionDialog
           cards={selectedCards}
           action={bulkAction}
           state={state}
           run={run}
+          completed={offerUndo}
           close={() => setBulkAction("")}
         />
       )}
-      {card && (
+      {card && inspection && (
         <CardDetails
+          key={card.key}
           card={card}
+          position={inspection.index}
+          count={inspection.cards.length}
+          revision={inspection.revision}
+          navigate={(step) =>
+            setInspection((current) =>
+              current ? { ...current, index: current.index + step } : null,
+            )
+          }
           state={state}
           run={run}
           busy={busy}
           reload={reload}
-          close={() => setCard(null)}
+          close={() => setInspection(null)}
         />
       )}
       {savingFilter && (
@@ -841,11 +1021,15 @@ export function Collection({
           </label>
           <button
             className="button primary"
-            disabled={busy || !filterName.trim() || !!filterError}
+            disabled={busy || !filterName.trim() || !!draftError}
             onClick={async () => {
               if (
                 await run(
-                  () => api("/filters", "POST", { name: filterName, filters }),
+                  () =>
+                    api("/filters", "POST", {
+                      name: filterName,
+                      filters: normalizeFilters(draft),
+                    }),
                   "View saved",
                 )
               ) {

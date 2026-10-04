@@ -13,13 +13,15 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import type { Card, Snapshot } from "./types";
+import type { BulkUndo, Card, Snapshot } from "./types";
 import { api, date, ExportDialog, setRevision } from "./ui";
 import { Collection } from "./Collection";
 import { Decks } from "./Decks";
 import { Missing } from "./Missing";
 import { Review } from "./Review";
 import { Settings } from "./Settings";
+import { ThemeControl, useTheme } from "./theme";
+import "./theme.css";
 import "./styles.css";
 type Page = "collection" | "decks" | "missing" | "review" | "settings";
 const pages: Page[] = ["collection", "decks", "missing", "review", "settings"];
@@ -28,12 +30,16 @@ const fromHash = (): Page => {
   return pages.includes(p) ? p : "collection";
 };
 function App() {
+  useTheme();
   const [page, updatePage] = useState<Page>(fromHash),
     [state, setState] = useState<Snapshot | null>(null),
     [collection, setCollection] = useState<Card[]>([]),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [toast, setToast] = useState(""),
+    [bulkUndo, setBulkUndo] = useState<BulkUndo | null>(null),
+    [undoError, setUndoError] = useState(""),
+    [undoBusy, setUndoBusy] = useState(false),
     [exportParams, setExportParams] = useState<Record<string, string> | null>(
       null,
     ),
@@ -61,10 +67,14 @@ function App() {
     location.hash = next;
   }, []);
   useEffect(() => {
-    const change = () => {
+    const change = (hashEvent: HashChangeEvent) => {
+      const previousHash = hashEvent.oldURL
+        ? new URL(hashEvent.oldURL).hash
+        : lastHash.current;
       const event = new Event("mtg-before-navigate", { cancelable: true });
       if (!window.dispatchEvent(event)) {
-        history.replaceState(null, "", lastHash.current);
+        history.replaceState(null, "", previousHash || "#collection");
+        lastHash.current = previousHash || "#collection";
         return;
       }
       lastHash.current = location.hash;
@@ -196,9 +206,20 @@ function App() {
             </button>
           </>
         ) : (
-          <p>
-            <Loader2 className="spin" size={18} /> Opening your collection…
-          </p>
+          <div role="status" aria-live="polite" aria-busy="true">
+            <p>
+              <Loader2 className="spin" size={18} /> Opening your collection…
+            </p>
+            <div className="loading-preview" aria-hidden="true">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div className="skeleton-row" key={i}>
+                  <i />
+                  <span />
+                  <span />
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     );
@@ -217,6 +238,9 @@ function App() {
         Skip to workspace
       </a>
       <aside className="sidebar">
+        <div className="mobile-theme">
+          <ThemeControl />
+        </div>
         <div className="brand">
           <div className="brand-symbol">
             <Layers3 size={23} />
@@ -253,9 +277,12 @@ function App() {
             Workspace /{" "}
             <strong>{nav.find((n) => n.page === page)?.label}</strong>
           </span>
-          <span className="topbar-status">
-            Saved workbook · {date(state.last_import?.created_at)}
-          </span>
+          <div className="topbar-meta">
+            <span className="topbar-status">
+              Saved workbook · {date(state.last_import?.created_at)}
+            </span>
+            <ThemeControl />
+          </div>
         </header>
         <main id="main-content" tabIndex={-1}>
           {error && (
@@ -288,6 +315,11 @@ function App() {
               collection={collection}
               openImport={openImport}
               exportList={setExportParams}
+              offerUndo={(undo) => {
+                setBulkUndo(undo);
+                setUndoError("");
+                if (!undo) notify("Wanted records saved; ownership unchanged");
+              }}
               review={() => navigate("review")}
             />
           )}
@@ -362,10 +394,56 @@ function App() {
           e.target.value = "";
         }}
       />
-      {toast && (
+      {toast && !bulkUndo && (
         <div className="toast" role="status">
           <CheckCircle2 size={18} />
           {toast}
+        </div>
+      )}
+      {bulkUndo && (
+        <div className="undo-bar">
+          <div role="status">
+            {bulkUndo.action === "location" ? "Location" : "Keep preference"}{" "}
+            updated for {bulkUndo.count} printings.
+            <small className="undo-limit">
+              Undo is available for 15 minutes, until another vault change.
+            </small>
+          </div>
+          <button
+            className="button secondary small"
+            disabled={undoBusy || busy}
+            onClick={async () => {
+              setUndoBusy(true);
+              setUndoError("");
+              try {
+                await api(
+                  "/collection/bulk/undo",
+                  "POST",
+                  { token: bulkUndo.token },
+                  bulkUndo.revision,
+                );
+                setBulkUndo(null);
+                await run(async () => {}, "Previous values restored");
+              } catch (e) {
+                setUndoError((e as Error).message);
+              } finally {
+                setUndoBusy(false);
+              }
+            }}
+          >
+            {undoBusy ? "Undoing…" : "Undo"}
+          </button>
+          <button
+            className="icon-button"
+            aria-label="Dismiss undo"
+            onClick={() => {
+              setBulkUndo(null);
+              setUndoError("");
+            }}
+          >
+            <X size={17} />
+          </button>
+          {undoError && <p role="alert">{undoError}</p>}
         </div>
       )}
       {exportParams && (

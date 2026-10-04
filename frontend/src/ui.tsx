@@ -61,11 +61,13 @@ export function Dialog({
   children,
   close,
   wide = false,
+  className = "",
 }: {
   title: string;
   children: React.ReactNode;
   close: () => void;
   wide?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     titleId = useId();
@@ -80,7 +82,7 @@ export function Dialog({
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      className={wide ? "dialog wide" : "dialog"}
+      className={(wide ? "dialog wide" : "dialog") + " " + className}
       onCancel={(e) => {
         e.preventDefault();
         close();
@@ -374,7 +376,7 @@ export function PriceState({
   };
   return (
     <small
-      className={status === "current" ? "muted" : "amber-text"}
+      className={`price-state ${status}`}
       title={refreshed ? `Last fetched ${date(refreshed)}` : undefined}
     >
       {labels[status] || status}

@@ -247,3 +247,10 @@ export const zones: Record<string, string> = {
   main: "Main deck",
   sideboard: "Sideboard",
 };
+
+export type BulkUndo = {
+  token: string;
+  revision: number;
+  action: string;
+  count: number;
+};

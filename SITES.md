@@ -33,6 +33,14 @@ Settings provides full JSON backup download, saved backup browsing, validated re
 - Acquisition records move between wanted, ordered, and received. These records never modify ownership or reduce the ownership wishlist. Record actual receipts in Excel and import the complete saved workbook.
 - Mobile collection uses compact rows and collapsed secondary tools/statistics. All five navigation destinations remain visible. Dialogs have accessible names, native focus containment, Escape dismissal, and return focus; text contrast, control sizes, and keyboard focus were improved.
 
+## Appearance and collection refinements
+
+System / Light / Dark applies before first paint, follows OS changes in System mode, and remembers a manual choice in this browser. Appearance and collection display preferences are device-local; inventory remains server-backed. Density, layout, and optional columns persist independently of saved filter views.
+
+Filters are draft changes in a native desktop side panel/mobile sheet. Apply commits them; Cancel/Escape preserves active filters. Saved views load into the draft. Search Sets by code; selected sets remain visible even when the search hides their options. The selected Actions sheet offers all-result selection after partial selection and supports the same 1,000-printing bound. Details Previous/Next result uses the ordered result context and opening revision, protects dirty locations during details and browser/route navigation, and resets artwork faces. Cancelled route navigation preserves the current filter URL. Missing results are keyed to selected decks, usage mode, revision, and currency; outdated results cannot be exported or tracked. Request failures offer Retry.
+
+Bulk location/keep updates offer a persistent Undo until another workspace change or 15 minutes. The server keeps an opaque expiring token in R2 and requires its exact revision before restoring earlier fields, including absence/default values. Undo tokens are transient and are not included in vault backups. A new bulk update replaces the displayed undo affordance; wanted records retain their existing reviewed flow. No change writes ownership, changes SQL, or changes production bootstrap secrets.
+
 ## Capacity and future growth
 
 The current bounded JSON workspace remains compatible with existing production state. Capacity failures preserve the last accepted inventory, and the importer no longer suggests splitting ownership across uploads. Workbook formatting/unused sheets can be removed without omitting Input holdings. Full restore previews accept bounded backup payloads (16 MB); state must still fit the 1.8 MB workspace limit.

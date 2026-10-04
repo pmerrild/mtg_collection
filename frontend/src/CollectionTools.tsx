@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { Card, ViewProps } from "./types";
+import type { BulkUndo, Card, ViewProps } from "./types";
 import { api, Dialog } from "./ui";
 import {
   filterDefaults,
@@ -16,13 +16,59 @@ export function CollectionFiltersPanel({
   collection: Card[];
   state: ViewProps["state"];
 }) {
+  const [setSearch, setSetSearch] = useState("");
+  const selectedSets = filters.sets.split(",").filter(Boolean);
   const multi = (
     key: "color" | "type" | "sets" | "rarity",
     label: string,
     options: string[],
   ) => (
     <fieldset className="filter-group">
-      <legend>{label}</legend>
+      <legend>
+        {label}
+        {key === "sets" && ` · ${selectedSets.length} selected`}
+      </legend>
+      {key === "sets" && (
+        <>
+          <label className="field">
+            Search sets
+            <input
+              type="search"
+              value={setSearch}
+              maxLength={50}
+              placeholder="Search set codes"
+              onChange={(e) => setSetSearch(e.target.value)}
+            />
+          </label>
+          {selectedSets.length > 0 && (
+            <div className="filter-chip-list" aria-label="Selected sets">
+              {selectedSets.map((value) => (
+                <button
+                  type="button"
+                  className="filter-chip selected"
+                  key={value}
+                  aria-label={`Remove selected set ${value}`}
+                  onClick={() =>
+                    update(
+                      "sets",
+                      selectedSets.filter((x) => x !== value).join(","),
+                    )
+                  }
+                >
+                  {value.toUpperCase()} ×
+                </button>
+              ))}
+            </div>
+          )}
+          {!options.some((value) =>
+            value.toLowerCase().includes(setSearch.trim().toLowerCase()),
+          ) && (
+            <p className="hint">
+              No sets match your search. Selected sets remain included.
+            </p>
+          )}
+        </>
+      )}
       {(key === "color" || key === "type") && (
         <label className="field">
           Match selected {label.toLowerCase()}
@@ -39,39 +85,46 @@ export function CollectionFiltersPanel({
         </label>
       )}
       <div className="filter-choice-list">
-        {options.map((value) => (
-          <label key={value}>
-            <input
-              type="checkbox"
-              checked={filters[key].split(",").includes(value)}
-              onChange={(e) =>
-                update(
-                  key,
-                  e.target.checked
-                    ? [...filters[key].split(",").filter(Boolean), value].join(
-                        ",",
-                      )
-                    : filters[key]
-                        .split(",")
-                        .filter((x) => x !== value)
-                        .join(","),
-                )
-              }
-            />
-            {key === "rarity"
-              ? (
-                  {
-                    C: "Common (C)",
-                    U: "Uncommon (U)",
-                    R: "Rare (R)",
-                    M: "Mythic (M)",
-                    L: "Land (L)",
-                    T: "Token (T)",
-                  } as Record<string, string>
-                )[value] || value
-              : value}
-          </label>
-        ))}
+        {options
+          .filter(
+            (value) =>
+              key !== "sets" ||
+              value.toLowerCase().includes(setSearch.trim().toLowerCase()),
+          )
+          .map((value) => (
+            <label key={value}>
+              <input
+                type="checkbox"
+                checked={filters[key].split(",").includes(value)}
+                onChange={(e) =>
+                  update(
+                    key,
+                    e.target.checked
+                      ? [
+                          ...filters[key].split(",").filter(Boolean),
+                          value,
+                        ].join(",")
+                      : filters[key]
+                          .split(",")
+                          .filter((x) => x !== value)
+                          .join(","),
+                  )
+                }
+              />
+              {key === "rarity"
+                ? (
+                    {
+                      C: "Common (C)",
+                      U: "Uncommon (U)",
+                      R: "Rare (R)",
+                      M: "Mythic (M)",
+                      L: "Land (L)",
+                      T: "Token (T)",
+                    } as Record<string, string>
+                  )[value] || value
+                : value}
+            </label>
+          ))}
       </div>
     </fieldset>
   );
@@ -317,10 +370,13 @@ export function BulkCollectionDialog({
   state,
   run,
   close,
-}: { cards: Card[]; action: string; close: () => void } & Pick<
-  ViewProps,
-  "state" | "run"
->) {
+  completed,
+}: {
+  cards: Card[];
+  action: string;
+  close: () => void;
+  completed: (undo: BulkUndo | null) => void;
+} & Pick<ViewProps, "state" | "run">) {
   const [expected] = useState(state.revision),
     [location, setLocation] = useState(""),
     [quantity, setQuantity] = useState("1"),
@@ -451,7 +507,7 @@ export function BulkCollectionDialog({
             setSaving(true);
             setError("");
             try {
-              await api(
+              const result = await api<{ undo: BulkUndo | null }>(
                 "/collection/bulk",
                 "POST",
                 {
@@ -465,6 +521,7 @@ export function BulkCollectionDialog({
                 },
                 expected,
               );
+              completed(result.undo);
               await run(async () => {});
               close();
             } catch (e) {

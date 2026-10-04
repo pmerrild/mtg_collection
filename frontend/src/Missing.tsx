@@ -16,34 +16,48 @@ export function Missing({
       initialDeck ? [initialDeck] : state.decks.map((d) => d.id),
     ),
     [mode, setMode] = useState("assembled"),
-    [wish, setWish] = useState<Wish | null>(null),
-    [error, setError] = useState(""),
+    [result, setResult] = useState<{ key: string; wish: Wish } | null>(null),
+    [requestState, setRequestState] = useState({
+      key: "",
+      loading: true,
+      error: "",
+    }),
+    [retry, setRetry] = useState(0),
     [newOrder, setNewOrder] = useState<{
       name: string;
       quantity: number;
       printing_key?: string | null;
       finish?: string | null;
       notes: string;
+      sourceKey?: string;
     } | null>(null);
+  const query = new URLSearchParams({
+    deck_ids: [...selected].sort((a, b) => a - b).join(","),
+    mode,
+  }).toString();
+  const queryKey = `${state.revision}:${state.settings.currency}:${query}`;
+  const wish = result?.key === queryKey ? result.wish : null;
+  const loading = requestState.key !== queryKey || requestState.loading;
+  const error = requestState.key === queryKey ? requestState.error : "";
+  const actionsReady = !!wish && !loading && !error;
   useEffect(() => {
     let cancelled = false;
-    api<Wish>(
-      "/wishlist?" +
-        new URLSearchParams({ deck_ids: selected.join(","), mode }),
-    )
+    setRequestState({ key: queryKey, loading: true, error: "" });
+    api<Wish>("/wishlist?" + query)
       .then((r) => {
         if (!cancelled) {
-          setWish(r);
-          setError("");
+          setResult({ key: queryKey, wish: r });
+          setRequestState({ key: queryKey, loading: false, error: "" });
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message);
+        if (!cancelled)
+          setRequestState({ key: queryKey, loading: false, error: e.message });
       });
     return () => {
       cancelled = true;
     };
-  }, [selected, mode, state]);
+  }, [queryKey, state, retry]);
   const incomplete = state.decks.filter(
     (d) => selected.includes(d.id) && !d.readiness.list.complete,
   );
@@ -59,7 +73,7 @@ export function Missing({
         </div>
         <button
           className="button secondary"
-          disabled={!wish?.items.length}
+          disabled={!actionsReady || !wish?.items.length || busy}
           onClick={() =>
             exportList({ kind: "missing", deck_ids: selected.join(","), mode })
           }
@@ -126,19 +140,41 @@ export function Missing({
       {error && (
         <p role="alert" className="notice danger">
           {error}
+          {wish && (
+            <span>
+              {" "}
+              Previous results for this selection remain visible. Retry before
+              exporting or tracking.
+            </span>
+          )}
+          <button
+            className="button secondary small"
+            onClick={() => setRetry((n) => n + 1)}
+          >
+            Retry missing cards
+          </button>
         </p>
       )}
-      <div className="wishlist-summary">
-        <strong>{wish?.copies ?? "…"} specified copies to acquire</strong>
-        <span>
-          {wish?.priced_copies
-            ? money(wish.estimate, state.settings.currency)
-            : "Unknown estimate"}{" "}
-          · {wish?.priced_copies ?? 0} priced /{" "}
-          {(wish?.copies || 0) - (wish?.priced_copies || 0)} unpriced copies
-        </span>
-      </div>
-      <section className="table-panel">
+      {loading && (
+        <p role="status" className="hint">
+          {wish
+            ? "Refreshing missing cards for this selection…"
+            : "Updating missing cards for the selected decks and usage mode…"}
+        </p>
+      )}
+      {wish && (
+        <div className="wishlist-summary">
+          <strong>{wish?.copies ?? "…"} specified copies to acquire</strong>
+          <span>
+            {wish?.priced_copies
+              ? money(wish.estimate, state.settings.currency)
+              : "Unknown estimate"}{" "}
+            · {wish?.priced_copies ?? 0} priced /{" "}
+            {(wish?.copies || 0) - (wish?.priced_copies || 0)} unpriced copies
+          </span>
+        </div>
+      )}
+      <section className="table-panel" aria-busy={loading}>
         <div className="table-scroll">
           <table>
             <thead>
@@ -171,7 +207,10 @@ export function Missing({
                   <td>
                     <button
                       className="button secondary small"
-                      onClick={() => setNewOrder({ ...item, notes: "" })}
+                      disabled={!actionsReady || busy}
+                      onClick={() =>
+                        setNewOrder({ ...item, notes: "", sourceKey: queryKey })
+                      }
                     >
                       Track wanted
                     </button>
@@ -300,15 +339,27 @@ export function Missing({
               placeholder="Shop, expected delivery, or budget"
             />
           </label>
+          {newOrder.sourceKey &&
+            (newOrder.sourceKey !== queryKey || !actionsReady) && (
+              <p role="alert" className="notice warning">
+                Requirements changed or are refreshing. Close this dialog and
+                review the updated missing cards before tracking.
+              </p>
+            )}
           <button
             className="button primary"
-            disabled={busy || !newOrder.name.trim()}
+            disabled={
+              busy ||
+              !newOrder.name.trim() ||
+              (!!newOrder.sourceKey &&
+                (newOrder.sourceKey !== queryKey || !actionsReady))
+            }
             onClick={async () => {
               if (
-                await run(
-                  () => api("/acquisitions", "POST", newOrder),
-                  "Wanted card saved; ownership unchanged",
-                )
+                await run(() => {
+                  const { sourceKey, ...record } = newOrder;
+                  return api("/acquisitions", "POST", record);
+                }, "Wanted card saved; ownership unchanged")
               )
                 setNewOrder(null);
             }}

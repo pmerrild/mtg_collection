@@ -6,6 +6,25 @@ The site version lives on its own GitHub branch, `sites/mtg-vault`, so other too
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
+## UI review and collection refinement — 2026-10-04
+
+Implemented and reviewed on `sites/mtg-vault`:
+
+- System / Light / Dark appearance applies before the interface renders. System follows OS changes; a manual preference persists in this browser. Shared emerald accents now use distinct accessible surfaces, text, controls, and severity colors across all five pages and dialogs.
+- Collection search stays in a short sticky toolbar. Filters use a desktop side panel or mobile sheet with draft changes, preview counts, Apply, Reset, and Cancel. Saved views load into the draft and wait for Apply. Set-code search shows a selected count, keeps selected sets visible as removable chips, and explains empty option results.
+- Selecting printings retains one compact bar with count, Clear, and Actions. The Actions sheet includes Select all results even after a partial selection. Card name and owned count lead each row; browser-local display preferences control list/grid, comfortable/compact density, and optional location, reservations, Excel labels, and value details.
+- Unchecked matching and unknown prices are neutral; failed/missing printings use amber, and identity conflicts use red. Actual metadata adds labeled mana, rarity, and foil information. Artwork only comes from the existing cache. Empty results expose reset; initial loading has a named state and cached results remain visible during refresh.
+- Printing details provide Previous/Next result, position, exact printing identity, and disabled boundaries. Navigation follows the ordered results and revision captured when details opens, resets artwork face, and guards unsaved location changes, including browser Back and route changes. Cancelling navigation retains the complete filter URL. A later workspace change causes a stale save to fail safely.
+- Reviewed bulk location and keep changes expose persistent Undo across page navigation. Undo restores previous values, including absent defaults, and is guarded by the exact saved revision and a 15-minute expiry. Another workspace change invalidates it. Ownership remains exclusively from Excel Input. The affordance explains the time/change limit.
+
+- Missing results belong to the selected decks, usage mode, and current workspace revision. Changed queries hide obsolete rows immediately; pending/failed requests block export and row-derived wanted tracking, expose status and Retry, and ignore late obsolete responses. Valid results stay visible during a refresh of the same query.
+
+The independent UI critic agreed with the core direction, identified stretched desktop thumbnails, disappearing Select all after partial selection, and saved views bypassing drafts. Those defects were corrected. The critic also independently agreed with set search and captured-context printing navigation, which were implemented in a second pass. A second, independent UX critic confirmed a route-change loss of unsaved locations and stale Missing results during changed/failed requests. A final pass corrected both, clarified result-navigation wording, and explained Undo limits. Stop adding speculative features after acceptance; prioritize actual data quality and confirmed daily workflows.
+
+Both independent critics agreed with the final fixes and found no remaining concrete UI/UX blocker. Future UI work: consider collapsible filter groups to reduce mobile scrolling and edition names only where verified names already exist in the card cache. These are backlog items, not implemented in this release.
+
+Next priorities require source facts: fix the invalid Plains row after confirming quantity/edition; enter complete intended targets; confirm live Scryfall matching/prices. Then investigate a workbook-label versus reservation comparison and explicit physical deck assembly status with real examples. Grouping every printing beneath one card is deferred because selection, finish constraints, location, protection, and trade exports must retain exact printing identity. Multi-copy physical tracking, condition/language/etched finish, and receipt reconciliation need explicit data conventions before implementation.
+
 ## Collection workflow release — 2026-10-04
 
 Implemented on the dedicated `sites/mtg-vault` branch:

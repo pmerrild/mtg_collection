@@ -2,6 +2,7 @@ import React from "react";
 import { ArrowDownToLine, FileSpreadsheet, RefreshCw } from "lucide-react";
 import type { ViewProps } from "./types";
 import { api, date } from "./ui";
+import { ThemeControl } from "./theme";
 import { Recovery } from "./Recovery";
 export function Settings({
   state,
@@ -21,6 +22,13 @@ export function Settings({
           </p>
         </div>
       </div>
+      <section className="settings-panel table-panel appearance-panel">
+        <h2>Appearance</h2>
+        <ThemeControl />
+        <p className="hint">
+          System follows your device. Your choice is remembered in this browser.
+        </p>
+      </section>
       <div className="settings-layout">
         <section className="settings-panel table-panel">
           <h2>

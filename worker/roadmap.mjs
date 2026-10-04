@@ -635,6 +635,31 @@ export async function handleRoadmap({
     await save(env, s, rev);
     return json({ id: d?.id, updated: true });
   }
+  if (path === "/collection/bulk/undo" && method === "POST") {
+    version();
+    const data = await body();
+    if (typeof data.token !== "string" || !/^[a-f0-9-]{36}$/.test(data.token))
+      throw Error("Choose a valid undo action.");
+    const object = await env.BUCKET.get("bulk-undo/" + data.token + ".json");
+    const undo = object ? await object.json() : null;
+    if (!undo || undo.expires < Date.now())
+      throw Error("This undo has expired.");
+    if (undo.revision !== rev)
+      throw Error(
+        "The collection changed in another tab. Undo cannot overwrite later changes.",
+      );
+    for (const row of undo.previous) {
+      const target =
+        undo.action === "location" ? s.locations : s.keep_preferences;
+      if (row.value === null) delete target[row.key];
+      else target[row.key] = row.value;
+    }
+    await save(env, s, rev);
+    try {
+      await env.BUCKET.delete("bulk-undo/" + data.token + ".json");
+    } catch {}
+    return json({ updated: true });
+  }
   if (path === "/collection/bulk" && method === "POST") {
     version();
     const data = await body();
@@ -654,6 +679,15 @@ export async function handleRoadmap({
       throw Error(
         "A selected printing is no longer in this collection. Reload and select again.",
       );
+    const previous = ["location", "keep"].includes(data.action)
+      ? selected.map((c) => ({
+          key: c.key,
+          value:
+            (data.action === "location" ? s.locations : s.keep_preferences)[
+              c.key
+            ] ?? null,
+        }))
+      : null;
     if (data.action === "location") {
       if (typeof data.location !== "string" || data.location.length > 150)
         throw Error("Enter a location of up to 150 characters.");
@@ -685,8 +719,27 @@ export async function handleRoadmap({
           updated_at: stamp(),
         });
     } else throw Error("Choose a bulk action.");
+    let undo = null;
+    if (previous) {
+      const token = crypto.randomUUID();
+      await env.BUCKET.put(
+        "bulk-undo/" + token + ".json",
+        JSON.stringify({
+          revision: rev + 1,
+          action: data.action,
+          previous,
+          expires: Date.now() + 900000,
+        }),
+      );
+      undo = {
+        token,
+        revision: rev + 1,
+        action: data.action,
+        count: selected.length,
+      };
+    }
     await save(env, s, rev);
-    return json({ updated: true, count: selected.length });
+    return json({ updated: true, count: selected.length, undo });
   }
   if (path === "/locations" && method === "PATCH") {
     version();
