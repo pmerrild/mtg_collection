@@ -135,7 +135,7 @@ export function Sets({ state }: ViewProps) {
         {!!state.summary.issues && (
           <p className="hint">
             Invalid workbook rows are excluded from ownership.{" "}
-            <a href="#review">Review source issues</a> before treating progress
+            <a href="#settings?section=data&review=1">Review source issues</a> before treating progress
             as final.
           </p>
         )}
@@ -318,7 +318,7 @@ export function Sets({ state }: ViewProps) {
                 {detail.needs_verification > 0 && (
                   <a
                     className="button secondary"
-                    href="#review"
+                    href="#settings?section=data&review=1"
                     onClick={() => setSelected(null)}
                   >
                     Review printings

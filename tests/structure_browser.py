@@ -6,7 +6,7 @@ parser=argparse.ArgumentParser();parser.add_argument('--url',default='http://127
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
  page=browser.new_page(viewport={'width':1366,'height':768},color_scheme='dark');errors=[];page.on('pageerror',lambda e:errors.append(str(e)));page.set_default_timeout(10000)
- page.goto(args.url);page.get_by_role('heading',name='Overview',exact=True).wait_for();state=page.request.get(args.url+'/api/state').json();before=state['summary']['copies']
+ page.goto(args.url);page.get_by_role('heading',name='Collection',exact=True).wait_for();state=page.request.get(args.url+'/api/state').json();before=state['summary']['copies']
  nav=page.get_by_role('navigation',name='Main navigation');main=page.locator('main')
  def go(label):nav.get_by_role('button',name=label,exact=True).click();page.wait_for_timeout(80)
  def bounds(label):
@@ -18,9 +18,9 @@ with sync_playwright() as p:
   main.evaluate('e=>e.scrollTop=0')
  for mode in ['light','dark']:
   go('Settings');page.get_by_role('group',name='Appearance').get_by_role('button',name=mode.title(),exact=True).click()
-  for width,height in [(1366,768),(1280,720),(1024,768),(390,844),(360,640)]:
+  for width,height in [(1366,768),(1280,720),(1024,768),(820,700),(701,700),(390,844),(360,640)]:
    page.set_viewport_size({'width':width,'height':height})
-   for label in ['Overview','Collection','Decks','Missing','Review','Settings']:
+   for label in ['Collection','Decks','Settings']:
     go(label);bounds((mode,width,height,label))
     assert page.get_by_role('combobox',name='Appearance',exact=True).count()==0
     if label!='Settings':assert page.get_by_role('group',name='Appearance',exact=True).count()==0
@@ -35,15 +35,10 @@ with sync_playwright() as p:
  page.set_viewport_size({'width':1366,'height':768});go('Settings');page.get_by_role('tab',name='Preferences',exact=True).click();page.get_by_role('group',name='Appearance').get_by_role('button',name='System',exact=True).click();page.emulate_media(color_scheme='light');page.wait_for_function("document.documentElement.dataset.theme==='light'");page.emulate_media(color_scheme='dark');page.wait_for_function("document.documentElement.dataset.theme==='dark'");page.get_by_role('group',name='Appearance').get_by_role('button',name='Dark',exact=True).click();page.reload();page.get_by_role('group',name='Appearance').wait_for();assert page.evaluate('document.documentElement.dataset.theme')=='dark'
  page.evaluate("location.hash='settings?section=data'");expect(page.get_by_role('tab',name='Data & prices',exact=True)).to_have_attribute('aria-selected','true');page.evaluate("location.hash='settings?section=invalid'");expect(page.get_by_role('tab',name='Preferences',exact=True)).to_have_attribute('aria-selected','true')
  page.get_by_role('tab',name='Preferences',exact=True).focus();page.keyboard.press('ArrowRight');expect(page.get_by_role('tab',name='Data & prices',exact=True)).to_be_focused();expect(page.get_by_role('tab',name='Data & prices',exact=True)).to_have_attribute('aria-selected','true')
- go('Overview');assert page.get_by_text('Unknown',exact=True).count()>0 or state['summary']['priced_copies']>0
- for deck in state['decks'][:6]:
-  row=page.locator('.overview-deck').filter(has=page.get_by_role('link',name=deck['name'],exact=True))
-  if row.count() and (not deck['readiness']['list']['complete'] or not deck['list_confirmed']):assert 'Ready to assemble' not in row.inner_text()
- first=page.locator('.overview-deck').first;first.get_by_role('link',name='View missing',exact=True).click();page.get_by_role('heading',name='Missing cards and acquisitions',exact=True).wait_for();assert 'deck=' in page.url;assert page.locator('.deck-pills input:checked').count()==1
  go('Collection');page.set_viewport_size({'width':390,'height':844});first_y=page.locator('.mobile-card-row').first.bounding_box()['y'];assert first_y<480,first_y
  page.get_by_role('button',name='Filters',exact=True).click();page.get_by_role('dialog',name='Filters and saved views').wait_for();page.screenshot(path=str(shots/'filter-dark-390.png'));page.keyboard.press('Escape')
  page.set_viewport_size({'width':700,'height':1000});page.evaluate("document.documentElement.style.fontSize='32px'")
- for label in ['Overview','Collection','Decks','Missing','Review','Settings']:go(label);bounds(('200% text',label))
+ for label in ['Collection','Decks','Settings']:go(label);bounds(('200% text',label))
  page.get_by_role('tab',name='Data & prices',exact=True).click();bounds('200% settings-data');page.get_by_role('tab',name='Recovery',exact=True).click();bounds('200% recovery')
  page.evaluate("document.documentElement.style.fontSize='16px'");page.set_viewport_size({'width':1366,'height':768})
  # Full, partial-ownership and offline set responses are fixtures in this browser only.
@@ -63,4 +58,4 @@ with sync_playwright() as p:
  verified[0]=True;dialog.get_by_role('button',name='Refresh checklist',exact=True).click();dialog.get_by_text('50% complete',exact=True).wait_for();expect(dialog.get_by_role('button',name='Missing printings',exact=True)).to_be_enabled();dialog.get_by_text('Missing',exact=True).wait_for();page.keyboard.press('Escape')
  assert page.request.get(args.url+'/api/state').json()['summary']['copies']==before;assert not errors,errors
  browser.close()
-print('Passed bounded main scrolling for all pages at 5 laptop/mobile sizes, Settings tabs/theme buttons/OS persistence, Overview incomplete targets/deep links, early mobile cards, 200% text, and unknown/offline/verified set-checklist states. No inventory writes or browser errors.')
+print('Passed bounded main scrolling for all pages at 7 laptop/mobile sizes, Settings tabs/theme buttons/OS persistence, early mobile cards, 200% text, and unknown/offline/verified set-checklist states. No inventory writes or browser errors.')

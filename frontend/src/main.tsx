@@ -2,52 +2,42 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Archive,
-  LayoutDashboard,
-  BookOpen,
   CheckCircle2,
   CircleAlert,
-  FileSpreadsheet,
   Layers3,
   Loader2,
-  RefreshCw,
   Settings2,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import type { BulkUndo, Card, Snapshot } from "./types";
-import { api, date, ExportDialog, setRevision } from "./ui";
+import { api, ExportDialog, setRevision } from "./ui";
 import { Collection } from "./Collection";
 import { Decks } from "./Decks";
-import { Missing } from "./Missing";
-import { Review } from "./Review";
 import { Settings } from "./Settings";
 import { useTheme } from "./theme";
 import "./theme.css";
 import "./styles.css";
 import "./workspace.css";
-import { Overview } from "./Overview";
+import "./interface.css";
+
 import { Sets } from "./Sets";
-type Page =
-  | "overview"
-  | "sets"
-  | "collection"
-  | "decks"
-  | "missing"
-  | "review"
-  | "settings";
-const pages: Page[] = [
-  "overview",
-  "sets",
-  "collection",
-  "decks",
-  "missing",
-  "review",
-  "settings",
-];
+type Page = "collection" | "sets" | "decks" | "settings";
+function canonicalHash(hash: string) {
+  const [path, query = ""] = hash.replace(/^#/, "").split("?");
+  const params = new URLSearchParams(query);
+  if (path === "review") return "settings?section=data&review=1";
+  if (path === "missing") {
+    params.set("view", "missing");
+    return "decks?" + params;
+  }
+  if (path === "overview" || !path) return "collection";
+  return ["collection", "collection/sets", "decks", "settings"].includes(path)
+    ? path + (query ? "?" + query : "")
+    : "collection";
+}
 const fromHash = (): Page => {
-  const path = location.hash.slice(1).split("?")[0];
-  const p = (path === "collection/sets" ? "sets" : path) as Page;
-  return pages.includes(p) ? p : "overview";
+  const path = canonicalHash(location.hash).split("?")[0];
+  return path === "collection/sets" ? "sets" : (path as Page);
 };
 function App() {
   useTheme();
@@ -64,7 +54,7 @@ function App() {
       null,
     );
   const fileRef = useRef<HTMLInputElement>(null),
-    lastHash = useRef(location.hash || "#overview"),
+    lastHash = useRef(location.hash || "#collection"),
     toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -83,7 +73,7 @@ function App() {
   const navigate = useCallback((next: string) => {
     const event = new Event("mtg-before-navigate", { cancelable: true });
     if (!window.dispatchEvent(event)) return;
-    location.hash = next;
+    location.hash = canonicalHash(next);
   }, []);
   useEffect(() => {
     const change = (hashEvent: HashChangeEvent) => {
@@ -92,13 +82,18 @@ function App() {
         : lastHash.current;
       const event = new Event("mtg-before-navigate", { cancelable: true });
       if (!window.dispatchEvent(event)) {
-        history.replaceState(null, "", previousHash || "#overview");
-        lastHash.current = previousHash || "#overview";
+        history.replaceState(null, "", previousHash || "#collection");
+        lastHash.current = previousHash || "#collection";
         return;
       }
-      lastHash.current = location.hash;
+      const canonical = "#" + canonicalHash(location.hash);
+      if (canonical !== location.hash)
+        history.replaceState(null, "", canonical);
+      lastHash.current = canonical;
       updatePage(fromHash());
     };
+    const canonical = "#" + canonicalHash(location.hash);
+    if (canonical !== location.hash) history.replaceState(null, "", canonical);
     window.addEventListener("hashchange", change);
     return () => window.removeEventListener("hashchange", change);
   }, []);
@@ -209,11 +204,8 @@ function App() {
     }
   };
   const nav = [
-    { page: "overview" as Page, label: "Overview", icon: LayoutDashboard },
     { page: "collection" as Page, label: "Collection", icon: Archive },
     { page: "decks" as Page, label: "Decks", icon: Layers3 },
-    { page: "missing" as Page, label: "Missing", icon: BookOpen },
-    { page: "review" as Page, label: "Review", icon: FileSpreadsheet },
     { page: "settings" as Page, label: "Settings", icon: Settings2 },
   ];
   if (!state)
@@ -287,30 +279,8 @@ function App() {
             </button>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <ShieldCheck size={20} />
-          <div>
-            <strong>Private collection</strong>
-            <span>Excel + saved target lists</span>
-          </div>
-        </div>
       </aside>
       <div className="main-shell">
-        <header className="topbar">
-          <span>
-            Workspace /{" "}
-            <strong>
-              {page === "sets"
-                ? "Collection / Sets"
-                : nav.find((n) => n.page === page)?.label}
-            </strong>
-          </span>
-          <div className="topbar-meta">
-            <span className="topbar-status">
-              Saved workbook · {date(state.last_import?.created_at)}
-            </span>
-          </div>
-        </header>
         <main id="main-content" tabIndex={-1}>
           {error && (
             <div role="alert" className="notice danger">
@@ -325,24 +295,23 @@ function App() {
               </button>
             </div>
           )}
-          {state.pending_import && page !== "review" && (
-            <div className="notice warning">
-              <span>A complete workbook snapshot is waiting for review.</span>
-              <button
-                className="button secondary small"
-                onClick={() => navigate("review")}
-              >
-                Review snapshot
-              </button>
-            </div>
-          )}
-          {page === "overview" && (
-            <Overview
-              state={state}
-              collection={collection}
-              openImport={openImport}
-            />
-          )}
+          {state.pending_import &&
+            !(
+              page === "settings" &&
+              new URLSearchParams(location.hash.split("?")[1] || "").get(
+                "review",
+              ) === "1"
+            ) && (
+              <div className="notice warning">
+                <span>A complete workbook snapshot is waiting for review.</span>
+                <button
+                  className="button secondary small"
+                  onClick={() => navigate("review")}
+                >
+                  Review snapshot
+                </button>
+              </div>
+            )}
           {page === "sets" && <Sets {...props} />}
           {page === "collection" && (
             <Collection
@@ -359,46 +328,12 @@ function App() {
             />
           )}
           {page === "decks" && (
-            <Decks
-              {...props}
-              exportList={setExportParams}
-              openMissing={(id) => {
-                navigate(`missing?deck=${id}`);
-              }}
-            />
+            <Decks {...props} exportList={setExportParams} />
           )}
-          {page === "missing" && (
-            <Missing
-              {...props}
-              initialDeck={
-                Number(
-                  new URLSearchParams(location.hash.split("?")[1] || "").get(
-                    "deck",
-                  ),
-                ) || undefined
-              }
-              exportList={setExportParams}
-            />
-          )}
-          {page === "review" && <Review {...props} openImport={openImport} />}
           {page === "settings" && (
             <Settings {...props} openImport={openImport} />
           )}
         </main>
-        <footer className="app-footer">
-          <span>Input imported {date(state.last_import?.created_at)}</span>
-          <button
-            className="text-button"
-            onClick={() => navigate("settings?section=data")}
-          >
-            <RefreshCw size={14} />
-            {state.price_job.running
-              ? `Refreshing Scryfall ${state.price_job.completed}/${state.price_job.total}`
-              : state.price_job.error
-                ? "Scryfall request failed · cached data retained"
-                : `Prices fetched ${date(state.settings.last_price_success)}`}
-          </button>
-        </footer>
       </div>
       <input
         ref={fileRef}

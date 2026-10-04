@@ -120,7 +120,8 @@ export function Review({
   busy,
   reload,
   openImport,
-}: ViewProps & { openImport: () => void }) {
+  embedded = false,
+}: ViewProps & { openImport: () => void; embedded?: boolean }) {
   const [review, setReview] = useState<Issues | null>(null),
     [error, setError] = useState(""),
     [match, setMatch] = useState<Issues["matches"][number] | null>(null),
@@ -176,7 +177,7 @@ export function Review({
       <div className="page-heading">
         <div>
           <p className="eyebrow">KEEP YOUR INVENTORY ACCURATE</p>
-          <h1>Import review</h1>
+          {embedded ? <h2>Collection data</h2> : <h1>Import review</h1>}
           <p className="subtitle">
             Complete snapshot changes, source issues, matching, and import
             history.

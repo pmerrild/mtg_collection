@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ArrowDownToLine, Plus, Trash2 } from "lucide-react";
 import type { ViewProps, Wish } from "./types";
 import { api, date, Dialog, Empty, money } from "./ui";
@@ -8,9 +8,11 @@ export function Missing({
   busy,
   exportList,
   initialDeck,
+  embedded = false,
 }: ViewProps & {
   exportList: (p: Record<string, string>) => void;
   initialDeck?: number;
+  embedded?: boolean;
 }) {
   const [selected, setSelected] = useState<number[]>(
       initialDeck ? [initialDeck] : state.decks.map((d) => d.id),
@@ -31,6 +33,7 @@ export function Missing({
       notes: string;
       sourceKey?: string;
     } | null>(null);
+  const purchasesRef = useRef<HTMLDetailsElement>(null);
   const query = new URLSearchParams({
     deck_ids: [...selected].sort((a, b) => a - b).join(","),
     mode,
@@ -66,7 +69,11 @@ export function Missing({
       <div className="page-heading">
         <div>
           <p className="eyebrow">PLAN YOUR NEXT ADDITIONS</p>
-          <h1>Missing cards and acquisitions</h1>
+          {embedded ? (
+            <h2>{initialDeck ? "Cards to buy" : "Compare decks"}</h2>
+          ) : (
+            <h1>Missing cards and acquisitions</h1>
+          )}
           <p className="subtitle">
             Specified targets compared with ownership; orders stay separate.
           </p>
@@ -81,56 +88,58 @@ export function Missing({
           <ArrowDownToLine size={16} /> Export for Scryfall
         </button>
       </div>
-      <section className="wishlist-controls table-panel">
-        <div>
-          <h3>Include decks</h3>
-          <div className="deck-pills">
-            {state.decks.map((d) => (
-              <label
-                className={`deck-pill ${selected.includes(d.id) ? "selected" : ""}`}
-                key={d.id}
+      {(!embedded || !initialDeck) && (
+        <section className="wishlist-controls table-panel">
+          <div>
+            <h3>Include decks</h3>
+            <div className="deck-pills">
+              {state.decks.map((d) => (
+                <label
+                  className={`deck-pill ${selected.includes(d.id) ? "selected" : ""}`}
+                  key={d.id}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(d.id)}
+                    onChange={(e) =>
+                      setSelected(
+                        e.target.checked
+                          ? [...selected, d.id]
+                          : selected.filter((id) => id !== d.id),
+                      )
+                    }
+                  />
+                  {d.name}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3>How will you use these decks?</h3>
+            <div className="segmented">
+              <button
+                aria-pressed={mode === "assembled"}
+                className={mode === "assembled" ? "selected" : ""}
+                onClick={() => setMode("assembled")}
               >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(d.id)}
-                  onChange={(e) =>
-                    setSelected(
-                      e.target.checked
-                        ? [...selected, d.id]
-                        : selected.filter((id) => id !== d.id),
-                    )
-                  }
-                />
-                {d.name}
-              </label>
-            ))}
+                Assembled together
+              </button>
+              <button
+                aria-pressed={mode === "shared"}
+                className={mode === "shared" ? "selected" : ""}
+                onClick={() => setMode("shared")}
+              >
+                Share copies
+              </button>
+            </div>
+            <p className="hint">
+              {mode === "assembled"
+                ? "One owned copy serves one selected deck at a time."
+                : "Copies can move between selected decks. Printing and finish requirements still apply."}
+            </p>
           </div>
-        </div>
-        <div>
-          <h3>How will you use these decks?</h3>
-          <div className="segmented">
-            <button
-              aria-pressed={mode === "assembled"}
-              className={mode === "assembled" ? "selected" : ""}
-              onClick={() => setMode("assembled")}
-            >
-              Assembled together
-            </button>
-            <button
-              aria-pressed={mode === "shared"}
-              className={mode === "shared" ? "selected" : ""}
-              onClick={() => setMode("shared")}
-            >
-              Share copies
-            </button>
-          </div>
-          <p className="hint">
-            {mode === "assembled"
-              ? "One owned copy serves one selected deck at a time."
-              : "Copies can move between selected decks. Printing and finish requirements still apply."}
-          </p>
-        </div>
-      </section>
+        </section>
+      )}
       {!!incomplete.length && (
         <p className="notice warning">
           Incomplete target lists: {incomplete.map((d) => d.name).join(", ")}.
@@ -174,7 +183,7 @@ export function Missing({
           </span>
         </div>
       )}
-      <section className="table-panel" aria-busy={loading}>
+      <section className="table-panel missing-results" aria-busy={loading}>
         <div className="table-scroll">
           <table>
             <thead>
@@ -196,9 +205,9 @@ export function Missing({
                       {item.finish || "Any finish"}
                     </small>
                   </td>
-                  <td>{item.quantity}</td>
-                  <td>{item.decks.join(", ")}</td>
-                  <td>
+                  <td data-label="To buy">{item.quantity}</td>
+                  <td data-label="Needed by">{item.decks.join(", ")}</td>
+                  <td data-label="Unit estimate">
                     {money(item.estimate, state.settings.currency)}
                     {item.estimate === null && (
                       <small>No compatible cached price</small>
@@ -239,71 +248,74 @@ export function Missing({
         Owned-card valuation still uses your actual printing and finish. Totals
         exclude unpriced cards, shipping, and condition adjustments.
       </p>
-      <section className="review-panel table-panel">
-        <div className="section-heading">
-          <h2>Acquisition tracking</h2>
-          <button
-            className="button secondary"
-            onClick={() => setNewOrder({ name: "", quantity: 1, notes: "" })}
-          >
-            <Plus size={16} /> Add wanted card
-          </button>
-        </div>
-        <p className="hint">
-          Wanted → ordered → received tracks your purchases. Even received
-          records do not change ownership: record receipt in Excel and import
-          the saved workbook. Orders are not subtracted from the ownership
-          wishlist.
-        </p>
-        <div className="acquisition-list">
-          {state.acquisitions.map((item) => (
-            <div className="acquisition-row" key={item.id}>
-              <div>
-                <strong>
-                  {item.quantity} {item.name}
-                </strong>
-                <small>
-                  {item.printing_key || "Any printing"} ·{" "}
-                  {item.finish || "Any finish"} · {date(item.updated_at)}
-                </small>
-                {item.notes && <p>{item.notes}</p>}
-              </div>
-              <select
-                aria-label={`Acquisition status for ${item.name}`}
-                value={item.status}
-                disabled={busy}
-                onChange={(e) =>
-                  run(() =>
-                    api(`/acquisitions/${item.id}`, "PATCH", {
-                      status: e.target.value,
-                    }),
-                  )
-                }
-              >
-                <option value="wanted">Wanted</option>
-                <option value="ordered">Ordered</option>
-                <option value="received">Received · record in Excel</option>
-              </select>
-              <button
-                className="icon-button danger-text"
-                aria-label={`Delete acquisition ${item.name}`}
-                disabled={busy}
-                onClick={() => {
-                  if (
-                    confirm(
-                      "Delete this tracking record? Inventory quantities stay unchanged.",
+      <details className="acquisition-disclosure" ref={purchasesRef}>
+        <summary>Purchases ({state.acquisitions.length})</summary>
+        <section className="review-panel table-panel">
+          <div className="section-heading">
+            <h2>Acquisition tracking</h2>
+            <button
+              className="button secondary"
+              onClick={() => setNewOrder({ name: "", quantity: 1, notes: "" })}
+            >
+              <Plus size={16} /> Add wanted card
+            </button>
+          </div>
+          <p className="hint">
+            Wanted → ordered → received tracks your purchases. Even received
+            records do not change ownership: record receipt in Excel and import
+            the saved workbook. Orders are not subtracted from the ownership
+            wishlist.
+          </p>
+          <div className="acquisition-list">
+            {state.acquisitions.map((item) => (
+              <div className="acquisition-row" key={item.id}>
+                <div>
+                  <strong>
+                    {item.quantity} {item.name}
+                  </strong>
+                  <small>
+                    {item.printing_key || "Any printing"} ·{" "}
+                    {item.finish || "Any finish"} · {date(item.updated_at)}
+                  </small>
+                  {item.notes && <p>{item.notes}</p>}
+                </div>
+                <select
+                  aria-label={`Acquisition status for ${item.name}`}
+                  value={item.status}
+                  disabled={busy}
+                  onChange={(e) =>
+                    run(() =>
+                      api(`/acquisitions/${item.id}`, "PATCH", {
+                        status: e.target.value,
+                      }),
                     )
-                  )
-                    run(() => api(`/acquisitions/${item.id}`, "DELETE"));
-                }}
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-          ))}
-        </div>
-        {!state.acquisitions.length && <p>No acquisitions tracked yet.</p>}
-      </section>
+                  }
+                >
+                  <option value="wanted">Wanted</option>
+                  <option value="ordered">Ordered</option>
+                  <option value="received">Received · record in Excel</option>
+                </select>
+                <button
+                  className="icon-button danger-text"
+                  aria-label={`Delete acquisition ${item.name}`}
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Delete this tracking record? Inventory quantities stay unchanged.",
+                      )
+                    )
+                      run(() => api(`/acquisitions/${item.id}`, "DELETE"));
+                  }}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
+          {!state.acquisitions.length && <p>No acquisitions tracked yet.</p>}
+        </section>
+      </details>
       {newOrder && (
         <Dialog title="Track a wanted card" close={() => setNewOrder(null)}>
           <label className="field">
@@ -360,8 +372,10 @@ export function Missing({
                   const { sourceKey, ...record } = newOrder;
                   return api("/acquisitions", "POST", record);
                 }, "Wanted card saved; ownership unchanged")
-              )
+              ) {
                 setNewOrder(null);
+                if (purchasesRef.current) purchasesRef.current.open = true;
+              }
             }}
           >
             Save tracking record

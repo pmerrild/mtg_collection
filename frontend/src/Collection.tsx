@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   Ellipsis,
@@ -312,6 +312,22 @@ export function Collection({
     validateDisplay,
   );
   const searchRef = useRef<HTMLInputElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const pendingPage = useRef(false);
+  useLayoutEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const measure = () =>
+      controls.parentElement?.style.setProperty(
+        "--collection-controls-height",
+        `${controls.getBoundingClientRect().height}px`,
+      );
+    const observer = new ResizeObserver(measure);
+    observer.observe(controls);
+    measure();
+    return () => observer.disconnect();
+  }, []);
   const update = (k: keyof Filters, v: string) =>
     setFilters((f) => ({ ...f, [k]: v }));
   const updateDraft = (k: keyof Filters, v: string) =>
@@ -422,6 +438,84 @@ export function Collection({
   const pages = Math.max(1, Math.ceil(filtered.length / 30)),
     currentPage = Math.min(page, pages - 1),
     rows = filtered.slice(currentPage * 30, (currentPage + 1) * 30);
+  useLayoutEffect(() => {
+    if (!pendingPage.current) return;
+    pendingPage.current = false;
+    const results = resultsRef.current;
+    const main = document.getElementById("main-content");
+    if (!results || !main) return;
+    results.focus({ preventScroll: true });
+    main.scrollTop +=
+      results.getBoundingClientRect().top -
+      main.getBoundingClientRect().top -
+      (controlsRef.current?.getBoundingClientRect().height || 0);
+  }, [currentPage]);
+  const paginate = (next: number) => {
+    pendingPage.current = true;
+    setPage(next);
+  };
+  const bulkToolbar = (
+    <div className="bulk-toolbar">
+      <label>
+        <input
+          type="checkbox"
+          aria-label="Select current page"
+          disabled={!rows.length}
+          ref={(input) => {
+            if (input)
+              input.indeterminate =
+                rows.some((c) => selected.has(c.key)) &&
+                !rows.every((c) => selected.has(c.key));
+          }}
+          checked={rows.length > 0 && rows.every((c) => selected.has(c.key))}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            setSelected((previous) => {
+              const next = new Set(previous);
+              for (const c of rows) {
+                if (checked && next.size < 1000) next.add(c.key);
+                else if (!checked) next.delete(c.key);
+              }
+              return next;
+            });
+          }}
+        />
+        <span className="sr-only">Select page</span>
+      </label>
+      {selectedCards.length ? (
+        <>
+          <strong aria-live="polite">{selectedCards.length} selected</strong>
+          <button
+            className="text-button"
+            onClick={() => setSelected(new Set())}
+          >
+            Clear<span className="sr-only"> selection</span>
+          </button>
+          <button
+            className="button primary small"
+            aria-haspopup="dialog"
+            onClick={() => setActionsOpen(true)}
+          >
+            Actions
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="result-count">
+            {filtered.length} printings ·{" "}
+            {filtered.reduce((n, c) => n + c.quantity, 0)} copies
+          </span>
+          <button
+            className="text-button"
+            disabled={!filtered.length || filtered.length > 1000}
+            onClick={selectAll}
+          >
+            Select all {filtered.length}
+          </button>
+        </>
+      )}
+    </div>
+  );
   const activeCount = Object.entries(filters).filter(
     ([k, v]) =>
       !["q", "sort", "view", "color_mode", "type_mode"].includes(k) &&
@@ -508,7 +602,7 @@ export function Collection({
         className={`table-panel collection-panel density-${display.density}`}
         aria-busy={busy}
       >
-        <div className="collection-controls">
+        <div className="collection-controls" ref={controlsRef}>
           <div className="table-toolbar">
             <label className="search-field">
               <Search size={18} />
@@ -554,22 +648,7 @@ export function Collection({
               </button>
             </div>
           </div>
-        </div>
-        <div className="collection-views" aria-label="Collection views">
-          {[
-            ["", "All cards"],
-            ["duplicates", "Duplicates"],
-            ["trade", "Trade candidates"],
-          ].map(([v, label]) => (
-            <button
-              key={v}
-              className={`filter-chip ${filters.view === v ? "selected" : ""}`}
-              aria-pressed={filters.view === v}
-              onClick={() => update("view", v)}
-            >
-              {label}
-            </button>
-          ))}
+          {bulkToolbar}
         </div>
         <FilterChips
           filters={filters}
@@ -600,237 +679,205 @@ export function Collection({
             </p>
           </details>
         )}
-        <div className="bulk-toolbar">
-          <label>
-            <input
-              type="checkbox"
-              aria-label="Select current page"
-              checked={
-                rows.length > 0 && rows.every((c) => selected.has(c.key))
-              }
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setSelected((previous) => {
-                  const next = new Set(previous);
-                  for (const c of rows) {
-                    if (checked && next.size < 1000) next.add(c.key);
-                    else if (!checked) next.delete(c.key);
-                  }
-                  return next;
-                });
-              }}
-            />
-            Select page
-          </label>
-          {selectedCards.length ? (
-            <>
-              <strong aria-live="polite">
-                {selectedCards.length} selected
-              </strong>
-              <button
-                className="text-button"
-                onClick={() => setSelected(new Set())}
-              >
-                Clear<span className="sr-only"> selection</span>
-              </button>
-              <button
-                className="button primary small"
-                aria-haspopup="dialog"
-                onClick={() => setActionsOpen(true)}
-              >
-                Actions
-              </button>
-            </>
-          ) : (
-            <button
-              className="text-button"
-              disabled={!filtered.length || filtered.length > 1000}
-              onClick={selectAll}
-            >
-              Select all {filtered.length}
-            </button>
-          )}
-        </div>
-        <div className="table-caption">
-          <span aria-live="polite">
-            {filtered.length} printings ·{" "}
-            {filtered.reduce((n, c) => n + c.quantity, 0)} owned copies
-            {filters.view &&
-              ` · ${filtered.reduce((n, c) => n + c.tradeable, 0)} candidate copies`}
+        <div
+          ref={resultsRef}
+          className="collection-results"
+          role="region"
+          tabIndex={-1}
+          aria-label={`Collection results, page ${currentPage + 1} of ${pages}`}
+        >
+          <span className="sr-only" role="status">
+            Page {currentPage + 1} of {pages}
           </span>
-          <span className="selection-hint">
-            Filters and sorting clear selection.
-          </span>
-        </div>
-        {display.grid ? (
-          <div className="artwork-grid">
-            {rows.map((c) => (
-              <div className="selectable-artwork" key={c.key}>
-                {selection(c)}
-                <button className="artwork-card" onClick={() => openCard(c)}>
-                  {c.image_url ? (
-                    <img src={c.image_url} alt={c.name} loading="lazy" />
-                  ) : (
-                    <div className="art-placeholder">
-                      <Layers3 />
-                      <span>No cached artwork</span>
-                    </div>
-                  )}
-                  <strong>{c.name}</strong>
-                  <small>
-                    {c.set_code.toUpperCase()} #{c.collector_number} ·{" "}
-                    {c.quantity} owned
-                  </small>
-                </button>
-                <CardTraits card={c} />
-                <MatchBadge card={c} />
-                {filters.view && candidates(c)}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className="table-scroll desktop-collection">
-              <table>
-                <thead>
-                  <tr>
-                    <th>
-                      <span className="sr-only">Select</span>
-                    </th>
-                    <th>Card{columns.location ? " / location" : ""}</th>
-                    <th>Printing</th>
-                    <th className="numeric">Owned</th>
-                    {columns.reservations && <th>Reservations</th>}
-                    {columns.labels && <th>Excel Deck labels</th>}
-                    {columns.value && <th className="numeric">Known value</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((c) => (
-                    <tr key={c.key}>
-                      <td>{selection(c)}</td>
-                      <td>
-                        <CardIdentity
-                          card={c}
-                          location={columns.location}
-                          open={() => openCard(c)}
-                        />
-                      </td>
-                      <td>
-                        {c.set_code.toUpperCase()} #{c.collector_number}
-                        <MatchBadge card={c} />
-                      </td>
-                      <td className="numeric">
-                        <strong className="owned-quantity">{c.quantity}</strong>
-                        <small>
-                          {c.nonfoil} nonfoil · {c.foil} foil
-                        </small>
-                        {filters.view && candidates(c)}
-                      </td>
-                      {columns.reservations && <td>{reservations(c)}</td>}
-                      {columns.labels && (
-                        <td>{c.decks.join(", ") || "No label"}</td>
-                      )}
-                      {columns.value && (
-                        <td className="numeric">
-                          {money(c.value, state.settings.currency)}
-                          {c.match_status === "matched" && (
-                            <PriceState
-                              status={c.price_state}
-                              refreshed={c.fetched_at}
-                            />
-                          )}{" "}
-                          {c.priced_copies > 0 &&
-                            c.priced_copies < c.quantity && (
-                              <small>
-                                {c.quantity - c.priced_copies} unpriced copies
-                              </small>
-                            )}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mobile-card-list">
+          {display.grid ? (
+            <div className="artwork-grid">
               {rows.map((c) => (
-                <div className="selectable-mobile" key={c.key}>
+                <div className="selectable-artwork" key={c.key}>
                   {selection(c)}
-                  <button
-                    className="mobile-card-row"
-                    onClick={() => openCard(c)}
-                  >
+                  <button className="artwork-card" onClick={() => openCard(c)}>
+                    {c.image_url ? (
+                      <img src={c.image_url} alt={c.name} loading="lazy" />
+                    ) : (
+                      <div className="art-placeholder">
+                        <Layers3 />
+                        <span>No cached artwork</span>
+                      </div>
+                    )}
                     <strong>{c.name}</strong>
-                    <span className="owned-quantity">{c.quantity} owned</span>
-                    <small className="printing-line">
+                    <small>
                       {c.set_code.toUpperCase()} #{c.collector_number} ·{" "}
-                      {c.nonfoil} nonfoil · {c.foil} foil
+                      {c.quantity} owned
                     </small>
-                    <CardTraits card={c} />
-                    {columns.location && c.location && (
-                      <small className="card-location" title={c.location}>
-                        {c.location}
-                      </small>
-                    )}
-                    {columns.reservations && (
-                      <small>
-                        {c.reserved} reserved · {c.quantity - c.reserved}{" "}
-                        unreserved
-                      </small>
-                    )}
-                    {filters.view && candidates(c)}
-                    {columns.labels && (
-                      <small>
-                        {c.decks.join(", ") || "No Excel Deck label"}
-                      </small>
-                    )}
-                    {columns.value && (
-                      <span>{money(c.value, state.settings.currency)}</span>
-                    )}
-                    <MatchBadge card={c} />
-                    {columns.value && c.match_status === "matched" && (
-                      <PriceState status={c.price_state} />
-                    )}
                   </button>
+                  <CardTraits card={c} />
+                  <MatchBadge card={c} />
+                  {filters.view && candidates(c)}
                 </div>
               ))}
             </div>
-          </>
-        )}
-        {!rows.length && !filterError && (
-          <Empty
-            title={
-              collection.length
-                ? "No matching cards"
-                : "Your collection is empty"
-            }
-          >
-            {collection.length ? (
-              <>
-                <p>Try another search or remove filters.</p>
-                <button
-                  className="button secondary"
-                  onClick={() =>
-                    setFilters({ ...defaults, sort: filters.sort })
-                  }
-                >
-                  Clear filters
-                </button>
-              </>
-            ) : (
-              <>
-                <p>Import your complete saved Input workbook to start.</p>
-                <button className="button primary" onClick={openImport}>
-                  Import saved workbook
-                </button>
-              </>
-            )}
-          </Empty>
-        )}
+          ) : (
+            <>
+              <div className="table-scroll desktop-collection">
+                <table>
+                  <colgroup>
+                    <col className="select-column" />
+                    <col />
+                    <col className="printing-column" />
+                    <col className="owned-column" />
+                    {columns.reservations && (
+                      <col className="reservations-column" />
+                    )}
+                    {columns.labels && <col className="labels-column" />}
+                    {columns.value && <col className="value-column" />}
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>
+                        <span className="sr-only">Select</span>
+                      </th>
+                      <th>Card{columns.location ? " / location" : ""}</th>
+                      <th>Printing</th>
+                      <th className="numeric">Owned</th>
+                      {columns.reservations && <th>Reservations</th>}
+                      {columns.labels && <th>Excel Deck labels</th>}
+                      {columns.value && (
+                        <th className="numeric">Known value</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((c) => (
+                      <tr key={c.key}>
+                        <td>{selection(c)}</td>
+                        <td>
+                          <CardIdentity
+                            card={c}
+                            location={columns.location}
+                            open={() => openCard(c)}
+                          />
+                        </td>
+                        <td className="printing-cell">
+                          {c.set_code.toUpperCase()} #{c.collector_number}
+                          <MatchBadge card={c} />
+                        </td>
+                        <td className="numeric owned-cell">
+                          <strong className="owned-quantity">
+                            {c.quantity}
+                          </strong>
+                          <small className="finish-counts">
+                            {c.nonfoil > 0 ? `${c.nonfoil} nonfoil` : ""}
+                            {c.nonfoil && c.foil ? " · " : ""}
+                            {c.foil > 0 ? `${c.foil} foil` : ""}
+                          </small>
+                          {filters.view && candidates(c)}
+                        </td>
+                        {columns.reservations && <td>{reservations(c)}</td>}
+                        {columns.labels && (
+                          <td>{c.decks.join(", ") || "No label"}</td>
+                        )}
+                        {columns.value && (
+                          <td className="numeric">
+                            {money(c.value, state.settings.currency)}
+                            {c.match_status === "matched" && (
+                              <PriceState
+                                status={c.price_state}
+                                refreshed={c.fetched_at}
+                              />
+                            )}{" "}
+                            {c.priced_copies > 0 &&
+                              c.priced_copies < c.quantity && (
+                                <small>
+                                  {c.quantity - c.priced_copies} unpriced copies
+                                </small>
+                              )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mobile-card-list">
+                {rows.map((c) => (
+                  <div className="selectable-mobile" key={c.key}>
+                    {selection(c)}
+                    <button
+                      className="mobile-card-row"
+                      onClick={() => openCard(c)}
+                    >
+                      <strong>{c.name}</strong>
+                      <span className="owned-quantity">{c.quantity} owned</span>
+                      <small className="printing-line">
+                        {c.set_code.toUpperCase()} #{c.collector_number} ·{" "}
+                        {c.nonfoil > 0 ? `${c.nonfoil} nonfoil` : ""}
+                        {c.nonfoil && c.foil ? " · " : ""}
+                        {c.foil > 0 ? `${c.foil} foil` : ""}
+                      </small>
+                      <CardTraits card={c} showFoil={false} />
+                      {columns.location && c.location && (
+                        <small className="card-location" title={c.location}>
+                          {c.location}
+                        </small>
+                      )}
+                      {columns.reservations && c.reserved > 0 && (
+                        <small>
+                          {c.reserved} reserved · {c.quantity - c.reserved}{" "}
+                          unreserved
+                        </small>
+                      )}
+                      {filters.view && candidates(c)}
+                      {columns.labels && (
+                        <small>
+                          {c.decks.join(", ") || "No Excel Deck label"}
+                        </small>
+                      )}
+                      {columns.value && (
+                        <span>{money(c.value, state.settings.currency)}</span>
+                      )}
+                      <MatchBadge card={c} />
+                      {columns.value && c.match_status === "matched" && (
+                        <PriceState status={c.price_state} />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {!rows.length && !filterError && (
+            <Empty
+              title={
+                collection.length
+                  ? "No matching cards"
+                  : "Your collection is empty"
+              }
+            >
+              {collection.length ? (
+                <>
+                  <p>Try another search or remove filters.</p>
+                  <button
+                    className="button secondary"
+                    onClick={() =>
+                      setFilters({ ...defaults, sort: filters.sort })
+                    }
+                  >
+                    Clear filters
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p>Import your complete saved Input workbook to start.</p>
+                  <button className="button primary" onClick={openImport}>
+                    Import saved workbook
+                  </button>
+                </>
+              )}
+            </Empty>
+          )}
+        </div>
         <div className="table-footer">
           <span>Imported {date(state.last_import?.created_at)}</span>
-          <Pagination page={currentPage} pages={pages} setPage={setPage} />
+          <Pagination page={currentPage} pages={pages} setPage={paginate} />
         </div>
       </section>
       {panel && (

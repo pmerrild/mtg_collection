@@ -181,6 +181,18 @@ export function CollectionFiltersPanel({
         Color and type groups can match any or all selections.
       </p>
       <div className="advanced-filters">
+        <label className="field">
+          View
+          <select
+            aria-label="Collection view"
+            value={filters.view}
+            onChange={(e) => update("view", e.target.value)}
+          >
+            <option value="">All cards</option>
+            <option value="duplicates">Duplicates</option>
+            <option value="trade">Trade candidates</option>
+          </select>
+        </label>
         {multi("color", "Colors", [
           "White",
           "Blue",
@@ -330,6 +342,12 @@ export function FilterChips({
       },
       view: { duplicates: "duplicates", trade: "trade candidates" },
     };
+    if (key === "sets") {
+      const codes = value.split(",").filter(Boolean);
+      return codes.length > 3
+        ? `${codes.length} sets`
+        : codes.join(", ").toUpperCase();
+    }
     return key === "deck_id"
       ? state.decks.find((d) => String(d.id) === value)?.name || value
       : labels[key]?.[value] || value;
@@ -344,6 +362,7 @@ export function FilterChips({
           key={k}
           className="filter-chip selected"
           aria-label={`Remove ${labels[k]} filter`}
+          title={`${labels[k]} ${v}`}
           onClick={() =>
             update(
               k as keyof CollectionFilters,
@@ -351,11 +370,13 @@ export function FilterChips({
             )
           }
         >
-          {labels[k]} {describe(k, v)}
-          {k === "color" || k === "type"
-            ? ` (${filters[(k + "_mode") as keyof CollectionFilters]})`
-            : ""}{" "}
-          ×
+          <span>
+            {labels[k]} {describe(k, v)}
+            {k === "color" || k === "type"
+              ? ` (${filters[(k + "_mode") as keyof CollectionFilters]})`
+              : ""}{" "}
+          </span>
+          <span aria-hidden="true">×</span>
         </button>
       ))}
       <button className="text-button" onClick={clear}>

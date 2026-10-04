@@ -371,7 +371,7 @@ export function PriceState({
     unmatched: "Printing not matched",
     unknown: "No price for this finish/currency",
     stale: "Cached price · over 24 hours old",
-    failed: "Lookup failed · retry in Import review",
+    failed: "Lookup failed · review in Settings",
     current: "Cached Scryfall price",
   };
   return (

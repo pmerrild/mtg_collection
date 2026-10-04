@@ -15,7 +15,7 @@ export type DisplayPreferences = {
 export const displayDefaults: DisplayPreferences = {
   grid: false,
   density: "comfortable",
-  columns: { location: true, reservations: true, labels: false, value: true },
+  columns: { location: true, reservations: false, labels: false, value: true },
 };
 export function validateDisplay(value: unknown): DisplayPreferences {
   const v = value as Partial<DisplayPreferences> | null;
@@ -66,7 +66,13 @@ export function ManaCost({ cost }: { cost: string }) {
     </span>
   ) : null;
 }
-export function CardTraits({ card }: { card: Card }) {
+export function CardTraits({
+  card,
+  showFoil = true,
+}: {
+  card: Card;
+  showFoil?: boolean;
+}) {
   const rarity =
     (
       {
@@ -87,7 +93,7 @@ export function CardTraits({ card }: { card: Card }) {
           {rarity}
         </span>
       )}
-      {card.foil > 0 && (
+      {showFoil && card.foil > 0 && (
         <span>
           <Sparkles size={13} aria-hidden="true" />
           {card.foil} foil
@@ -103,7 +109,8 @@ export function MatchBadge({ card }: { card: Card }) {
     not_found: "Printing not found",
     name_mismatch: "Identity conflict",
   };
-  return card.match_status === "matched" ? null : (
+  return card.match_status === "matched" ||
+    card.match_status === "unresolved" ? null : (
     <span
       className={`match-badge ${card.match_status === "name_mismatch" ? "conflict" : card.match_status === "lookup_failed" || card.match_status === "not_found" ? "attention" : "neutral"}`}
     >
@@ -122,17 +129,15 @@ export function CardIdentity({
 }) {
   return (
     <button className="card-cell" onClick={open}>
-      <span className="card-thumb">
-        {card.image_url ? (
+      {card.image_url && (
+        <span className="card-thumb">
           <img src={card.image_url} alt="" loading="lazy" />
-        ) : (
-          <Layers3 size={18} />
-        )}
-      </span>
+        </span>
+      )}
       <span>
         <strong>{card.name}</strong>
         <small className="card-type">{card.card_type}</small>
-        <CardTraits card={card} />
+        <CardTraits card={card} showFoil={false} />
         {location && card.location && (
           <small className="card-location" title={card.location}>
             {card.location}

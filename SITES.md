@@ -20,7 +20,7 @@ Settings provides full JSON backup download, saved backup browsing, validated re
 
 ## UX roadmap implementation
 
-- Deck tiles/details distinguish target completeness, entered-target ownership, reservation-aware availability, and advisory format checks. The seeded Ramos list displays 19 entered cards and 81 unspecified slots; unspecified slots are never acquisitions.
+- Deck library/details distinguish target completeness, entered-target ownership, reservation-aware availability, and advisory format checks. The seeded Ramos list displays 19 entered cards and 81 unspecified slots; unspecified slots are never acquisitions.
 - Lower numeric priority reserves first. Explicit compatible copy transfers show source/destination shortages before saving and preserve quantity, printing, and finish. Priority changes clear manual transfers and recompute assignments. Imports also recompute reservations against the accepted ownership snapshot.
 - Excel Deck annotations remain source labels. Planned reservations and manually entered binder/box/deck locations are independent app fields. A location describes a printing/name group and can mention several places; per-copy serial tracking is not implied.
 - Matching is searchable/filterable and paginated across the entire queue. Failed requests, unchecked identities, missing printings, and conflicts are distinct. Import history shows source, status, fingerprint, and totals for the latest 100 records; earlier workspace history can be recovered from backups.
@@ -31,15 +31,21 @@ Settings provides full JSON backup download, saved backup browsing, validated re
 - Collection UI and exports share one filter/sort implementation. TXT combines names. Trade exports use candidate quantities; CSV explicitly labels owned finish counts, owned priced-copy counts, and owned value so these are not mistaken for trade valuations. Selected exports use a POST body rather than an oversized URL. Optional JSON fields upgrade lazily; no SQL migration or runtime secret change is required.
 - Analysis reports nonland mana curve, known land count, card-type counts, and printed mana-symbol requirements. It excludes sideboard and explicitly counts cards with unavailable metadata.
 - Acquisition records move between wanted, ordered, and received. These records never modify ownership or reduce the ownership wishlist. Record actual receipts in Excel and import the complete saved workbook.
-- Mobile collection uses compact rows and a shared Manage menu. All six navigation destinations remain visible. Dialogs have accessible names, native focus containment, Escape dismissal, and return focus; text contrast, control sizes, and keyboard focus were improved.
+- Mobile collection uses compact rows and a shared Manage menu. Only Collection, Decks, and Settings are primary navigation destinations. Dialogs have accessible names, native focus containment, Escape dismissal, and return focus; text contrast, control sizes, and keyboard focus were improved.
 
-## Workspace, Overview, and Settings
+## Three-section interface
 
-Overview is the default landing page and dashboard for known ownership, priced-copy coverage, source/matching attention, confirmed deck progress, workbook freshness, and acquisition record counts. Ready to assemble requires a complete confirmed list and no reservation shortage; format checks and physical assembly remain separate. Overlapping deck shortages are never summed into one shopping total. Unknown values and incomplete source totals stay explicit.
+**Collection, Decks, and Settings** are the only primary destinations. Collection is the landing page. A slim top bar replaces the global sidebar, breadcrumbs, and status footer; there is no Overview/dashboard. The shell occupies the viewport with one scrolling main region. Neutral light and dark surfaces use an emerald action/selection accent.
 
-The shell occupies the viewport with an internal scrolling main region; the document cannot scroll beyond the workspace. All six destinations remain visible on mobile. Shared headings/controls/surfaces span the platform, with neutral graphite dark surfaces and an emerald action/selection accent. Collection's Manage menu holds export, reload, and workbook import, and supplies a visible keyboard focus-return target.
+Collection shows cards immediately, with Search, Filters, Sort, and Display in a compact sticky toolbar. All cards/Duplicates/Trade are in Filters, and Set progress stays inside Collection. The shared selection bar remains reachable when choosing lower rows; page selection has a native mixed state. Pagination focuses and scrolls to the next page's first result. Tables have explicit column budgets and switch to compact rows based on available panel width. Optional columns and long filter/name content do not create horizontal overflow. Manage holds export, reload, and workbook import and provides a visible focus-return target.
 
-Settings separates Preferences, Data & prices, and Recovery. Light, Dark, and System are buttons only in Preferences. Appearance/display choices are browser-local; currency applies across the vault. Recovery loads on demand and separates collection backups from deck revisions. Deep links such as `#settings?section=data` update the panel even while Settings is already open.
+Decks opens a compact library, then a card-first detail page. Incomplete targets remain explicit: unspecified slots are not cards to buy. Edit list opens an inline working page with Save/Cancel, name/format, Add/Find/Paste, and direct card name/quantity/zone rows. Optional printing/finish constraints and detailed deck options expand on demand. Newly added rows receive focus. Missing lists, multi-deck comparisons, and purchases remain subordinate Decks views. Detailed options retain exports, revisions, reservation previews/transfers, analysis, advisory format checks, and guarded deletion.
+
+Editing uses the opening revision and retains unsaved-change protection. Pending saves disable editing and prevent navigation, including an unchanged save. Rejected saves keep the draft and show an error beside Save; a later successful validation cannot erase that failure. DOM and keyboard order match the visible editor order.
+
+Settings separates Preferences, Data & prices, and Recovery. Light, Dark, and System are buttons only in Preferences. Appearance/display choices are browser-local; currency applies across the vault. Data & prices contains workbook change review, matching, source issues, and import history. Recovery loads on demand and separates collection backups from deck revisions. Deep links update the panel even while Settings is already open.
+
+Legacy `#overview` falls back to Collection, `#review` opens Settings → Data & prices → Collection data, and `#missing` opens Decks comparison or the specified deck's Missing tab. Existing Collection bookmarks and Set progress links remain supported.
 
 ## Set completion
 

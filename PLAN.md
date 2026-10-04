@@ -6,9 +6,27 @@ The site version lives on its own GitHub branch, `sites/mtg-vault`, so other too
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
-## Platform structure, Overview, and set completion — 2026-10-04
+## Simplification reset — 2026-10-04
 
-The stricter second review found structural problems that the earlier control improvements missed: crowded Settings, a green-tinted dark theme, an unbounded document, and no useful landing page. Independent UI and UX critics agreed on this revision, implemented on `sites/mtg-vault`:
+The user's request to cut the platform down to **Collection, Decks, and Settings** supersedes the earlier dashboard and navigation roadmap below. This release revamps the working interface on `sites/mtg-vault`; it does not expand the feature backlog.
+
+- Only three primary destinations in a slim shared top bar. Collection is the landing page. Remove Overview, the global side navigation, breadcrumbs, and status footer. Keep one bounded content scroll within the laptop viewport.
+- Collection puts card names and owned quantities first. Search, Filters, Sort, and Display share a compact sticky toolbar. All cards/Duplicates/Trade live in Filters; Set progress remains a Collection subpage. Remove repetitive metadata and empty artwork placeholders. Optional columns, saved views, selection, exports, and reviewed bulk actions remain available.
+- Decks starts with a compact library. Selecting a deck shows its card list immediately, with an honest entered-target/unspecified summary. Edit list opens a working page with direct name/quantity/zone rows, Add/Find/Paste, and visible Save/Cancel. Printing constraints and detailed deck options are expandable. Missing cards, comparisons, and purchases stay inside Decks.
+- Settings groups Preferences, Data & prices, and Recovery. Light, Dark, and System remain buttons in Preferences. Workbook review, matching corrections, source issues, and import history live under Data & prices. Old Review/Missing/Overview bookmarks redirect to their current homes.
+- Quiet neutral light/dark surfaces, shared controls, readable spacing, and responsive card rows replace the crowded interface. Narrow laptop widths receive the same attention as desktop and phone sizes.
+- Preserve ownership, revision checks, confirmations, import review, recovery, reservation previews, and dirty navigation protection. During a save, fields are disabled and navigation is blocked. A rejected save retains its draft and a visible message beside Save; late validation cannot erase the failure.
+
+Separate independent UI and UX critics reviewed the redesign and re-reviewed corrections. Their findings prompted narrower table budgets, responsive rows at intermediate widths, compact density fixes, native partial-selection state, sticky selection actions, pagination focus/scroll recovery, correct editor reading order, focus on newly added rows, and persistent save failures. Both approved the final workflows without a remaining blocker.
+
+Acceptance: all 38 deterministic domain/API checks and six Chromium browser suites pass on disposable local data. The new working-interface suite covers eight sizes from 1366 × 768 to 360 × 640 in both actual themes, long filters/names, optional columns, a 100-card editor, dirty/busy/rejected-save flows, legacy links, and unchanged ownership. Existing suites cover 200% text, keyboard/focus, imports, filters/exports, Undo, revision recovery, acquisitions, stale writes, and set catalogs. See SITES_VALIDATION.md for limits.
+
+Continue from actual use of these three sections. Do not reintroduce a dashboard or add speculative tools after acceptance. Source-data completeness and live Scryfall verification remain separate outstanding work.
+
+## Earlier platform structure, Overview, and set completion — 2026-10-04 (superseded navigation)
+
+
+Historical release notes: the stricter second review found structural problems that the earlier control improvements missed: crowded Settings, a green-tinted dark theme, an unbounded document, and no useful landing page. Independent UI and UX critics agreed on this revision, implemented on `sites/mtg-vault`:
 
 - Bounded viewport workspace with scrolling inside `main` and shared headings, surfaces, navigation, and controls. Collection has one vertical content scroll and sticky search. Mobile has six visible destinations, readable 14 px navigation, and a shared Manage menu; its first card appears before 480 px at 390 × 844.
 - Neutral graphite dark surfaces and quiet light surfaces; emerald identifies actions and selection. Light, Dark, and System are buttons only in Settings → Preferences. Browser-local persistence, first-paint behavior, OS switching, and cross-tab synchronization remain intact.
@@ -17,7 +35,7 @@ The stricter second review found structural problems that the earlier control im
 - Collection → Set progress uses a complete validated Scryfall catalog of English paper printings including variants. Duplicate copies and foil/nonfoil count once; separate token/supplemental edition codes have separate checklists. Load/refresh is explicit. Percentage and missing count stay unknown until every included owned printing is verified. Invalid workbook rows are excluded and visibly flagged. Verified checklists offer All/Missing printings and paging.
 - Auxiliary R2 set catalogs replace prior data only after full validation; partial/invalid/unsafe/failed fetches preserve the previous complete checklist. No SQL migration, ownership edit, secret change, or production reset.
 
-Independent review caught wrong-panel Settings links, misleading set-load/failure copy, inconsistent collection actions, excess mobile spacing, and dialog focus returning to a hidden menu item. These were corrected and re-reviewed. Regression checks also corrected the sticky toolbar position in the new scrolling container. Both critics approve the final structure. Mobile set explanation length is minor remaining polish.
+Independent review caught wrong-panel Settings links, misleading set-load/failure copy, inconsistent collection actions, excess mobile spacing, and dialog focus returning to a hidden menu item. These were corrected and re-reviewed. Regression checks also corrected the sticky toolbar position in the new scrolling container. Both critics approved that earlier structure. Mobile set explanation length is minor remaining polish.
 
 Acceptance includes domain/API checks, five sizes in both themes, every destination/Settings section, internal scroll bounds, 200% text, keyboard navigation/focus return, System persistence, existing editing/recovery/export/filter/Undo workflows, and provisional/offline/verified set states. See SITES_VALIDATION.md for results and limits.
 
@@ -158,7 +176,7 @@ A collection or wishlist exported this way is a card list. Excel and the local a
 
 Acceptance checks: exported quantities equal the selected source quantities; a complete target deck includes unowned targets; a missing-list export contains only positive shortages; supported deck zones remain distinct; and a name-only export aggregates printings without changing total quantities. Live importer verification is outstanding because Scryfall was unreachable from this environment during planning.
 
-## Proposed interface
+## Original proposed interface (superseded by the simplification reset)
 
 Use a compact desktop workspace: a narrow left navigation, search at the top of each relevant page, and the working content immediately visible. Start in Collection. Use a restrained charcoal or neutral theme, clear table typography, and small card thumbnails with larger previews. Use color plus text for completion states. Avoid a marketing landing page.
 
@@ -310,7 +328,7 @@ Use one lead/integrator and a few bounded roles rather than several agents editi
 | AI Developer | Implement import, storage, matching, deck logic, API integration, and UI wiring | Working app plus setup instructions |
 | Independent reviewer, optionally a separate agent | Check calculations, failure handling, usability, and data preservation | Review findings and acceptance-check results |
 
-First agree on the data model and ownership/allocation rules. Then the designer and developer can work in parallel against a shared API contract. Use separate branches/worktrees and file ownership; the lead integrates changes. Keep a single owner for schema changes and dependency changes. Separate Codex agents can perform these roles when implementation is requested; no agents or new chats have been launched for this plan.
+First agree on the data model and ownership/allocation rules. Then the designer and developer can work in parallel against a shared API contract. Use separate branches/worktrees and file ownership; the lead integrates changes. Keep a single owner for schema changes and dependency changes. Separate Codex agents can perform these roles when implementation is requested; the hosted implementation has since used separate independent UI and UX critics. No new user-owned chats are required.
 
 Original local implementation milestones (retain as baseline; use the UX roadmap above for the next hosted release):
 

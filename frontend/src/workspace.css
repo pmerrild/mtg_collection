@@ -677,7 +677,9 @@ main {
   max-height: none;
 }
 .collection-panel thead {
-  position: static;
+  position: sticky;
+  top: calc(var(--collection-controls-height, 73px) - 24px);
+  z-index: 8;
 }
 .brand-symbol {
   color: #fff;
@@ -726,5 +728,157 @@ main {
   .collection-panel .table-caption {
     padding-top: 6px;
     padding-bottom: 6px;
+  }
+}
+
+/* Collection responds to its usable workspace, including narrow laptop panes. */
+.collection-panel {
+  container: collection / inline-size;
+}
+.collection-panel .table-scroll {
+  overflow: visible;
+}
+.collection-panel table {
+  min-width: 0;
+  table-layout: fixed;
+}
+.collection-panel .select-column {
+  width: 52px;
+}
+.collection-panel .printing-column {
+  width: 114px;
+}
+.collection-panel .owned-column {
+  width: 140px;
+}
+.collection-panel .reservations-column {
+  width: 140px;
+}
+.collection-panel .labels-column {
+  width: 140px;
+}
+.collection-panel .value-column {
+  width: 116px;
+}
+.collection-panel :is(td, th) {
+  padding-inline: 12px;
+  overflow-wrap: anywhere;
+}
+.collection-panel.density-compact td {
+  padding-block: 7px;
+}
+.collection-panel .finish-counts {
+  white-space: nowrap;
+}
+.collection-panel .card-cell > span:not(.card-thumb) {
+  min-width: 0;
+}
+.collection-panel .card-cell strong {
+  overflow-wrap: anywhere;
+}
+.collection-panel .card-cell small {
+  max-width: 100%;
+}
+.collection-panel .active-filters .filter-chip {
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+.collection-panel .active-filters .filter-chip > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.collection-panel .active-filters .filter-chip > span:last-child {
+  flex-shrink: 0;
+}
+.collection-results {
+  position: relative;
+}
+.collection-results:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.collection-panel .mobile-card-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  text-align: left;
+  background: var(--surface);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 16px 16px 16px 48px;
+  color: var(--text);
+}
+.collection-panel .mobile-card-row strong {
+  grid-column: 1;
+  font-size: 1rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.collection-panel .mobile-card-row > .owned-quantity {
+  grid-column: 2;
+  grid-row: 1;
+  white-space: nowrap;
+  font-size: 1rem;
+}
+.collection-panel .mobile-card-row :is(small, .card-traits, .match-badge) {
+  grid-column: 1 / -1;
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.collection-panel .mobile-card-row .card-location {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collection-panel .selectable-mobile > .printing-select {
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  z-index: 1;
+}
+.collection-panel.density-compact .mobile-card-row {
+  padding-block: 10px;
+  gap: 4px;
+}
+@container collection (max-width: 899px) {
+  .desktop-collection {
+    display: none;
+  }
+  .mobile-card-list {
+    display: block;
+  }
+  .collection-controls .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  .collection-toolbar-actions {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: 100%;
+    gap: 8px;
+  }
+  .collection-toolbar-actions select {
+    width: 100%;
+    min-width: 0;
+  }
+  .collection-toolbar-actions .button {
+    padding-inline: 10px;
+    font-size: 0.875rem;
+  }
+  .collection-controls .search-field {
+    width: 100%;
+  }
+  .selection-hint {
+    display: none;
   }
 }
