@@ -128,11 +128,11 @@ Design explicit states for an initial import, no decks yet, an incomplete row, u
 
 ## UI/UX review and next-release roadmap — 2026-10-04
 
-The review covered the implementation and local desktop/mobile renders. The desktop layout is orderly, but deck readiness, copy reservations, and data confidence need clearer explanations. Live Scryfall behavior remains unverified. All work in this section is planned unless explicitly described as current behavior.
+The review covered the earlier implementation and local desktop/mobile renders. Its findings below describe that version. The roadmap is now implemented on `sites/mtg-vault`: separate deck-readiness states; explicit reservation priorities/transfers with impact previews; full snapshot and matching review; validated collection restores and deck revisions; direct card-row editing; mobile/accessibility improvements; distinct refresh actions; and the later analysis, storage, saved-view, acquisition, and artwork tools. See SITES_VALIDATION.md for verified scope. Live Scryfall behavior remains unverified from the authoring environment, and format checks remain advisory.
 
 ### 1. Make deck readiness honest and prominent
 
-Current example: Ramos shows `19 / 19 owned`, `Covered`, and a full green progress bar even though the seeded Commander target contains only 19 cards. Format warnings are below the card table. Ownership coverage of entered targets is useful, but it does not establish a complete, ready-to-play deck.
+At review time, Ramos showed `19 / 19 owned`, `Covered`, and a full green progress bar even though the seeded Commander target contains only 19 cards. Format warnings are below the card table. Ownership coverage of entered targets is useful, but it does not establish a complete, ready-to-play deck.
 
 Show four separate states: target-list completeness, collection ownership coverage, availability after reservations, and format checks. Put an incomplete-list warning and important format issues near the deck title. Use text alongside color and keep detailed checks expandable.
 
@@ -145,7 +145,7 @@ Acceptance criteria:
 
 ### 2. Explain and control copy reservations
 
-The current app calculates copies in other decks, but does not offer a clear priority or transfer workflow. All five seeded decks start reserved at the same priority. A planned reservation also does not prove a card is physically in that deck.
+At review time, the app calculated copies in other decks without a clear priority or transfer workflow. All five seeded decks start reserved at the same priority. A planned reservation also does not prove a card is physically in that deck.
 
 Show which deck reserves each compatible copy, including printing and finish. Add explicit deck priority and a `Move from…` action with a preview of the source deck's resulting shortage. Label planned reservations separately from physical storage or assembly status.
 
@@ -158,7 +158,7 @@ Acceptance criteria:
 
 ### 3. Complete import and card-matching review
 
-Current review emphasizes reductions, and the matching UI shows only the first 50 unresolved items without a way to reach the rest. Import history is stored but not shown. Expand review to additions, removals, quantity and finish changes, invalid rows, and affected decks.
+At review time, review emphasized reductions and the matching UI showed only the first 50 unresolved items without a way to reach the rest. Import history was stored but not shown. Expand review to additions, removals, quantity and finish changes, invalid rows, and affected decks.
 
 Acceptance criteria:
 
@@ -170,7 +170,7 @@ Acceptance criteria:
 
 ### 4. Make recovery usable
 
-The hosted app saves backups before inventory replacement and deck deletion, but has no restore interface. Deck edits have no revision history, and closing an editor can lose unsaved work.
+At review time, the hosted app saved backups before inventory replacement and deck deletion, but had no restore interface. Deck edits had no revision history, and closing an editor could lose unsaved work.
 
 Acceptance criteria:
 
@@ -181,7 +181,7 @@ Acceptance criteria:
 
 ### 5. Improve mobile use and accessibility
 
-At a 390 × 844 viewport, the collection table begins about 720 px down the page and is roughly 998 px wide. No card rows are visible in the first viewport. Navigation also requires horizontal scrolling. Small table-header text has approximately 3.2:1 contrast, and dialogs lack accessible names.
+At review time, at a 390 × 844 viewport, the collection table began about 720 px down the page and is roughly 998 px wide. No card rows are visible in the first viewport. Navigation also requires horizontal scrolling. Small table-header text has approximately 3.2:1 contrast, and dialogs lack accessible names.
 
 Acceptance criteria:
 
@@ -192,7 +192,7 @@ Acceptance criteria:
 
 ### 6. Make deck editing faster
 
-The current editor is primarily a textarea, with card lookup hidden in an expandable area. Keep bulk paste, and add direct editing for ordinary adjustments.
+At review time, the editor was primarily a textarea, with card lookup hidden in an expandable area. Keep bulk paste, and add direct editing for ordinary adjustments.
 
 Acceptance criteria:
 
@@ -203,7 +203,7 @@ Acceptance criteria:
 
 ### 7. Clarify refresh actions and price confidence
 
-The hosted Refresh action currently reports that saved inventory is current; it does not read Excel. Missing prices mainly appear as dashes, with explanations elsewhere in the app.
+At review time, hosted Refresh reported that saved inventory was current without reading Excel, and missing prices mainly appeared as dashes with explanations elsewhere in the app.
 
 Acceptance criteria:
 
@@ -211,7 +211,7 @@ Acceptance criteria:
 - Explain unknown, stale, and failed price states where users see them. Show priced-copy coverage and unpriced quantities beside collection or acquisition totals.
 - Retain cached prices during failures, and never present an unknown price as zero or imply a partial estimate covers every card.
 
-### Later additions
+### Additional tools — implemented in this release
 
 | Addition | Useful behavior | Dependency |
 | --- | --- | --- |
@@ -221,14 +221,14 @@ Acceptance criteria:
 | Acquisition tracking | Track wanted, ordered, and received cards | Ownership increases only when Excel records receipt; avoid double-counting orders |
 | Artwork browsing | Optional card grid, larger previews, and double-faced-card flipping | Reliable matching, responsive image loading, and accessible alternatives |
 
-### Decisions and constraints to resolve
+### Decisions and constraints
 
-- **Assignment reconciliation:** define how imported Excel Deck labels inform initial targets and physical-location hints, and how disagreements with app reservations are surfaced. Keep the source annotation visible.
-- **Acquisition-price policy:** decide whether a missing-card estimate uses the cheapest compatible printing, a selected edition, or an explicit finish requirement. State the policy beside estimates; owned-card valuation continues to use the actual printing and finish.
-- **Capacity and growth:** the current hosted importer caps uploads at 4 MiB, expanded workbook content at 24 MiB, and worksheet rows at 20,000. Parsed snapshots are limited to 1.2 MB and saved vault JSON to 1.8 MB. Because each accepted import replaces the full inventory, splitting a workbook into several uploads is not a safe workaround. Design a complete-snapshot growth path and show useful limit errors.
+- **Assignment reconciliation:** Excel labels seed targets once and remain visibly labeled source annotations. Planned reservations and manually recorded locations are separate app data. The UI displays both labels and reservations; accepting a new snapshot preserves target lists and recomputes reservations, including resetting manual transfers.
+- **Acquisition-price policy:** use the lowest compatible cached price, respecting explicit printing and finish requirements. This is not a live market-wide cheapest-price search. State the policy beside estimates; owned-card valuation continues to use the actual printing and finish.
+- **Capacity and growth:** the current hosted importer caps uploads at 4 MiB, expanded workbook content at 24 MiB, and worksheet rows at 20,000. Parsed snapshots are limited to 1.2 MB and saved vault JSON to 1.8 MB. Because each accepted import replaces the full inventory, splitting a workbook into several uploads is not a safe workaround. Limit errors preserve current data and explain complete-snapshot semantics. The growth design is to move holdings and requirements to versioned D1 rows and atomically switch an accepted snapshot pointer after validation; see SITES.md. That larger-storage migration is reserved for an actual capacity need.
 - **Other-tool and release workflow:** keep this version on `sites/mtg-vault`; document preview, validation, and explicit Site publication. GitHub commits alone do not deploy. Schema changes must preserve existing hosted inventory, decks, matching decisions, and backups, with a migration and recovery plan.
 
-### Recommended sequence
+### Delivery sequence — completed
 
 1. Deliver honest deck-readiness states, reservation explanations, complete import/matching review, and restore/undo support. Include mobile and accessibility fixes as release acceptance requirements.
 2. Add explicit reservation transfer/priority controls, faster deck editing, and clearer refresh/price interactions.
@@ -272,4 +272,4 @@ Original local implementation milestones (retain as baseline; use the UX roadmap
 
 Acceptance checks should prove that reimporting does not duplicate holdings; foil splitting preserves total quantities; unresolved quantities remain flagged; printing mismatches are surfaced; identical cards are not allocated twice; double-faced names resolve correctly; offline price failures retain cached values; and app restart preserves decks. Verify totals against the workbook rather than snapshotting the UI implementation.
 
-Operating system, Input authority, Count/Foil semantics, blank Foil handling, and initial currency are confirmed. The remaining product decisions are the completeness of each intended target decklist, assignment reconciliation, reservation priorities, physical-location tracking, and the acquisition-price policy described in the UX roadmap.
+Operating system, Input authority, Count/Foil semantics, blank Foil handling, and initial currency are confirmed. The app now exposes intended-list confirmation, reservation priority/transfer controls, physical-location fields, and the stated cached acquisition-price policy. Actual complete target decklists, invalid Excel rows, and the physical movement/receipt of cards remain user-maintained source facts.

@@ -5,7 +5,9 @@ from openpyxl import load_workbook
 BASE=sys.argv[1] if len(sys.argv)>1 else 'http://127.0.0.1:4173'
 def request(path,method='GET',data=None,raw=False,headers=None):
  payload=data if raw else json.dumps(data).encode() if data is not None else None
- req=urllib.request.Request(BASE+'/api'+path,data=payload,method=method,headers=headers or ({'Content-Type':'application/json'} if payload else {}))
+ request_headers=dict(headers or ({'Content-Type':'application/json'} if payload else {}))
+ if method not in ('GET','HEAD'): request_headers['X-Vault-Revision']=str(request('/state')['revision'])
+ req=urllib.request.Request(BASE+'/api'+path,data=payload,method=method,headers=request_headers)
  with urllib.request.urlopen(req,timeout=20) as response:
   content=response.read()
   return json.loads(content) if response.headers.get('Content-Type','').startswith('application/json') else content
@@ -21,7 +23,8 @@ out=io.BytesIO();workbook.save(out)
 pending=upload(out.getvalue());assert pending['reductions'];assert request('/state')['summary']['copies']==892
 request('/import/'+pending['id']+'/apply','POST',{})
 assert request('/state')['summary']['copies']==891
-upload(original.read_bytes());assert request('/state')['summary']['copies']==892
+pending=upload(original.read_bytes());assert pending['pending'];assert request('/state')['summary']['copies']==891
+request('/import/'+pending['id']+'/apply','POST',{});assert request('/state')['summary']['copies']==892
 created=request('/decks','POST',{'name':'Hosted acceptance','format':'casual60','active':True,'decklist':'2 Unowned Acceptance Card\nSideboard\n1 Sol Ring'})
 id=created['id'];state=request('/state');deck=next(d for d in state['decks'] if d['id']==id);assert deck['total']==3;assert '2 Unowned Acceptance Card' in deck['decklist']
 assert request('/wishlist?deck_ids='+str(id))['copies']>=2

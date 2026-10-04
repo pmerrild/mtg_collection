@@ -10,13 +10,33 @@ The original React/Vite interface is reused. `worker/` ports the Python import a
 
 The private initial inventory and original workbook acceptance fixture are `MagicTheGatheringInventory.xlsx`, and differs from the synthetic sample workbook: 679 populated Input rows, 892 known copies, 48 foil copies, 607 names, 655 printing/name groups. Row 253 is quarantined for blank Count and unconfirmed numeric Set. Repeated rows remain separate holdings. Count includes foil; blank Foil means zero. EUR is the default; USD is selectable.
 
-Inventory is imported into private runtime storage, never committed to this public GitHub branch. The optional initial snapshot is supplied as a compressed Sites secret and applied once on the first app request; it also saves a source snapshot in R2. Later uploads use the normal workbook workflow. A hosted site cannot watch files on a Mac. Save Excel, then use **Import workbook** or Settings → **Upload workbook**. Only Input is read. Imports are complete snapshots, so an unchanged file adds no copies. Quantity reductions require review. Target decklists and printing corrections survive imports. Limits: 4 MB compressed workbook, 24 MB expanded ZIP contents, 20,000 Input rows, and 1.2 MB parsed snapshot. Oversize and failed imports keep the previous inventory.
+Inventory is imported into private runtime storage, never committed to this public GitHub branch. The optional initial snapshot is supplied as a compressed Sites secret and applied once on the first app request; it also saves a source snapshot in R2. Later uploads use the normal workbook workflow. A hosted site cannot watch files on a Mac. Save Excel, then use **Import workbook** or Settings → **Upload workbook**. Only Input is read. Imports are complete snapshots, so an unchanged file adds no copies. Every changed snapshot requires full review of additions, removals, quantities, finishes, invalid rows, and affected decks before applying. Target decklists and printing corrections survive imports. Limits: 4 MB compressed workbook, 24 MB expanded ZIP contents, 20,000 Input rows, and 1.2 MB parsed snapshot. Oversize and failed imports keep the previous inventory.
 
 The five workbook deck labels seed proposed targets. Their owned assignments cannot establish missing unowned targets; enter your intended decklists. Commander and ruleset warnings are advisory; special commander pairings and card exceptions may need manual review.
 
 Scryfall is called directly with batch size 75, queued requests, bounded retries and backoff. Prices are cached per printing and finish. Refresh occurs daily while the app is used, with a manual refresh control. Missing prices remain unknown. TXT exports guarantee quantity/name syntax only; designate commander and sideboard manually in Scryfall or export each zone separately. Scryfall account synchronization is not implemented.
 
-Download full JSON backups and detailed inventory CSV from Settings. Before inventory replacement and deck deletion, a backup is also saved in R2. JSON backups include inventory, decklists, corrections, cached cards and import history; they are not SQLite files.
+Settings provides full JSON backup download, saved backup browsing, validated restore previews, and recovery of individual deck revisions or deleted decks. R2 stores backups before inventory replacement, deletion, reservation changes, and restores; deck revisions are saved before edits, deletion, and revision restoration. JSON backups include inventory, targets, corrections, cached cards, history, saved views, locations, and acquisition records. Restore validates the backup and its references, previews replacement impact, and writes state/cache atomically with a revision guard. Old version-1 JSON backups are upgraded without resetting existing data. Editing a deck uses its opening revision to reject stale saves.
+
+## UX roadmap implementation
+
+- Deck tiles/details distinguish target completeness, entered-target ownership, reservation-aware availability, and advisory format checks. The seeded Ramos list displays 19 entered cards and 81 unspecified slots; unspecified slots are never acquisitions.
+- Lower numeric priority reserves first. Explicit compatible copy transfers show source/destination shortages before saving and preserve quantity, printing, and finish. Priority changes clear manual transfers and recompute assignments. Imports also recompute reservations against the accepted ownership snapshot.
+- Excel Deck annotations remain source labels. Planned reservations and manually entered binder/box/deck locations are independent app fields. A location describes a printing/name group and can mention several places; per-copy serial tracking is not implied.
+- Matching is searchable/filterable and paginated across the entire queue. Failed requests, unchecked identities, missing printings, and conflicts are distinct. Import history shows source, status, fingerprint, and totals for the latest 100 records; earlier workspace history can be recovered from backups.
+- Deck editing supports quantity/name rows, zones, optional printing/finish constraints, card lookup/previews, reviewed bulk replacement, duplication as a draft, immediate validation, and unsaved-change protection. All zones/constraints survive revisions.
+- Collection supports saved filters, location search, unreserved/foil/unresolved/deck-needed views, optional artwork grids, larger previews, and double-faced-card flipping when cached Scryfall artwork exists. Export honors the displayed filters; TXT combines names, while CSV keeps printing/finish details.
+- Analysis reports nonland mana curve, known land count, card-type counts, and printed mana-symbol requirements. It excludes sideboard and explicitly counts cards with unavailable metadata.
+- Acquisition records move between wanted, ordered, and received. These records never modify ownership or reduce the ownership wishlist. Record actual receipts in Excel and import the complete saved workbook.
+- Mobile collection uses compact rows and collapsed secondary tools/statistics. All five navigation destinations remain visible. Dialogs have accessible names, native focus containment, Escape dismissal, and return focus; text contrast, control sizes, and keyboard focus were improved.
+
+## Capacity and future growth
+
+The current bounded JSON workspace remains compatible with existing production state. Capacity failures preserve the last accepted inventory, and the importer no longer suggests splitting ownership across uploads. Workbook formatting/unused sheets can be removed without omitting Input holdings. Full restore previews accept bounded backup payloads (16 MB); state must still fit the 1.8 MB workspace limit.
+
+If real inventory growth reaches these limits, introduce immutable snapshot IDs with holding/issue rows in D1, move deck requirements and auxiliary app data to separate tables, stage the entire Input inventory in bounded batches, and switch the active snapshot only in a guarded transaction after count/finish/identity validation. Keep prior snapshots recoverable and page the UI/API reads. Migrate the existing vault and R2 backups with a verified round trip before increasing upload limits. Never concatenate partial replacement uploads or silently drop rows.
+
+Source and release steps: work on `sites/mtg-vault`, build and run the checks below, preview with disposable local D1/R2, commit the reviewed source, synchronize the same commit to the existing Site publication repository, package the matching Worker/client/migrations, and publish that saved version privately. Schema changes must append migrations; this release upgrades optional JSON fields and needs no new SQL migration. Do not alter runtime bootstrap secrets or reset production storage.
 
 ## Development
 
@@ -26,6 +46,9 @@ Requires Node 22+.
 npm ci
 npm --prefix frontend ci
 npm test
+npm run build
+npm run test:api
+python tests/roadmap_browser.py --url http://127.0.0.1:4180 # disposable seeded preview only
 npm run db:generate # only after schema changes
 npm run build
 npx wrangler d1 execute DB --local --config dist/server/wrangler.json --file drizzle/0000_tense_human_fly.sql

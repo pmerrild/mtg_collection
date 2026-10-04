@@ -1,5 +1,7 @@
 > Hosted version: this branch is `sites/mtg-vault`. See [SITES.md](SITES.md) for the private Site, hosted upload workflow, and development instructions. The local app instructions below apply to the original application retained from `main`.
 
+On the `sites/mtg-vault` branch, run the hosted Worker version described in [SITES.md](SITES.md). The local Python app instructions below describe the original implementation retained on `main`. The hosted UI uses its own API and should be previewed with Wrangler.
+
 # MTG Vault
 
 A local Magic: The Gathering collection and deck workspace, built from PLAN.md. Excel remains your ownership source; decks, card matches, and cached prices are saved in SQLite.
