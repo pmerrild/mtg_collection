@@ -1,0 +1,15 @@
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+data/
+.DS_Store
+.pytest_cache/
+
+*.xlsx
+!sample-inventory.xlsx
+*.sqlite3
+.env
+.env.*
+tests/fixtures/private-inventory.xlsx
+screenshots/
