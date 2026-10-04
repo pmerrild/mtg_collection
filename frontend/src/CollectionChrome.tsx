@@ -133,9 +133,9 @@ export function CardIdentity({
         <strong>{card.name}</strong>
         <small className="card-type">{card.card_type}</small>
         <CardTraits card={card} />
-        {location && (
+        {location && card.location && (
           <small className="card-location" title={card.location}>
-            {card.location || "Location not recorded"}
+            {card.location}
           </small>
         )}
       </span>

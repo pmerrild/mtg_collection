@@ -31,7 +31,21 @@ Settings provides full JSON backup download, saved backup browsing, validated re
 - Collection UI and exports share one filter/sort implementation. TXT combines names. Trade exports use candidate quantities; CSV explicitly labels owned finish counts, owned priced-copy counts, and owned value so these are not mistaken for trade valuations. Selected exports use a POST body rather than an oversized URL. Optional JSON fields upgrade lazily; no SQL migration or runtime secret change is required.
 - Analysis reports nonland mana curve, known land count, card-type counts, and printed mana-symbol requirements. It excludes sideboard and explicitly counts cards with unavailable metadata.
 - Acquisition records move between wanted, ordered, and received. These records never modify ownership or reduce the ownership wishlist. Record actual receipts in Excel and import the complete saved workbook.
-- Mobile collection uses compact rows and collapsed secondary tools/statistics. All five navigation destinations remain visible. Dialogs have accessible names, native focus containment, Escape dismissal, and return focus; text contrast, control sizes, and keyboard focus were improved.
+- Mobile collection uses compact rows and a shared Manage menu. All six navigation destinations remain visible. Dialogs have accessible names, native focus containment, Escape dismissal, and return focus; text contrast, control sizes, and keyboard focus were improved.
+
+## Workspace, Overview, and Settings
+
+Overview is the default landing page and dashboard for known ownership, priced-copy coverage, source/matching attention, confirmed deck progress, workbook freshness, and acquisition record counts. Ready to assemble requires a complete confirmed list and no reservation shortage; format checks and physical assembly remain separate. Overlapping deck shortages are never summed into one shopping total. Unknown values and incomplete source totals stay explicit.
+
+The shell occupies the viewport with an internal scrolling main region; the document cannot scroll beyond the workspace. All six destinations remain visible on mobile. Shared headings/controls/surfaces span the platform, with neutral graphite dark surfaces and an emerald action/selection accent. Collection's Manage menu holds export, reload, and workbook import, and supplies a visible keyboard focus-return target.
+
+Settings separates Preferences, Data & prices, and Recovery. Light, Dark, and System are buttons only in Preferences. Appearance/display choices are browser-local; currency applies across the vault. Recovery loads on demand and separates collection backups from deck revisions. Deep links such as `#settings?section=data` update the panel even while Settings is already open.
+
+## Set completion
+
+Collection has Cards and Set progress subpages. Set progress groups accepted ownership by edition code. Explicit loading uses Scryfall's complete paginated English paper printing catalog including variants. Duplicate copies and foil/nonfoil count once; token/supplemental editions with separate codes remain separate. Completion and missing count require a complete catalog and exact verified owned identities. Otherwise they remain unknown while verified ownership and unresolved counts are visible; Missing browsing is disabled. Invalid workbook rows are excluded from accepted ownership and flagged.
+
+Validated catalogs are cached under `set-catalogs/<code>.json` in R2. Fetching is bounded to 40 pages/10,000 entries, validates scope/IDs/numbers/counts and next-page URLs, and writes only after full validation. Failed/partial refreshes retain previous complete data. These public catalog caches are auxiliary, separate from vault backups; restored ownership recomputes progress. No SQL, bindings, secrets, or inventory migration is required.
 
 ## Appearance and collection refinements
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
+  Ellipsis,
   FileSpreadsheet,
   Layers3,
   RefreshCw,
@@ -22,6 +23,7 @@ import {
   BulkCollectionDialog,
 } from "./CollectionTools";
 import { usePreference } from "./theme";
+import { CollectionTabs } from "./Sets";
 import {
   CardIdentity,
   CardTraits,
@@ -453,38 +455,33 @@ export function Collection({
             locations.
           </p>
         </div>
-        <div className="actions">
-          <button
-            className="button secondary"
-            disabled={!!filterError}
-            onClick={() => exportList(exportParams())}
+        <details
+          className="collection-menu"
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node))
+              e.currentTarget.removeAttribute("open");
+          }}
+        >
+          <summary className="button secondary" aria-label="Collection actions">
+            <Ellipsis size={18} aria-hidden="true" />
+            Manage
+          </summary>
+          <div
+            className="collection-menu-options"
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("button")) {
+                const menu = e.currentTarget.closest("details");
+                menu?.removeAttribute("open");
+                menu?.querySelector("summary")?.focus();
+              }
+            }}
           >
-            <ArrowDownToLine size={16} /> Export
-          </button>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() => run(reload, "Saved collection reloaded")}
-          >
-            <RefreshCw size={16} className={busy ? "spin" : ""} />
-            {busy ? "Updating…" : "Reload collection"}
-          </button>
-          <button
-            className="button primary"
-            disabled={busy}
-            onClick={openImport}
-          >
-            <FileSpreadsheet size={16} /> Import saved workbook
-          </button>
-        </div>
-        <details className="mobile-actions">
-          <summary>Workbook and exports</summary>
-          <div className="actions">
             <button
               className="button secondary"
               disabled={!!filterError}
               onClick={() => exportList(exportParams())}
             >
+              <ArrowDownToLine size={16} />
               Export
             </button>
             <button
@@ -492,6 +489,7 @@ export function Collection({
               disabled={busy}
               onClick={() => run(reload, "Saved collection reloaded")}
             >
+              <RefreshCw size={16} className={busy ? "spin" : ""} />
               {busy ? "Updating…" : "Reload collection"}
             </button>
             <button
@@ -499,51 +497,13 @@ export function Collection({
               disabled={busy}
               onClick={openImport}
             >
+              <FileSpreadsheet size={16} />
               Import saved workbook
             </button>
           </div>
         </details>
       </div>
-      <details className="collection-overview">
-        <summary>
-          {state.summary.copies.toLocaleString()} known copies ·{" "}
-          {state.summary.foil_copies} foil · {state.summary.unresolved}{" "}
-          printings to check
-        </summary>
-        <div className="metrics">
-          <div className="metric">
-            <span>Owned copies</span>
-            <strong>{state.summary.copies}</strong>
-            <small>
-              {state.summary.issues
-                ? "Invalid rows need review; total is incomplete."
-                : "From the last accepted Input snapshot"}
-            </small>
-          </div>
-          <div className="metric">
-            <span>Unique cards</span>
-            <strong>{state.summary.unique_cards}</strong>
-            <small>{state.summary.printings} printings</small>
-          </div>
-          <div className="metric">
-            <span>Known collection value</span>
-            <strong>
-              {state.summary.priced_copies
-                ? money(state.summary.value, state.settings.currency)
-                : "Unknown"}
-            </strong>
-            <small>
-              {state.summary.priced_copies} / {state.summary.copies} copies
-              priced
-            </small>
-          </div>
-          <button className="metric review-metric" onClick={review}>
-            <span>Source issues</span>
-            <strong>{state.summary.issues}</strong>
-            <small>{state.summary.unresolved} printings awaiting a match</small>
-          </button>
-        </div>
-      </details>
+      <CollectionTabs active="cards" />
       <section
         className={`table-panel collection-panel density-${display.density}`}
         aria-busy={busy}
@@ -808,9 +768,9 @@ export function Collection({
                       {c.nonfoil} nonfoil · {c.foil} foil
                     </small>
                     <CardTraits card={c} />
-                    {columns.location && (
+                    {columns.location && c.location && (
                       <small className="card-location" title={c.location}>
-                        {c.location || "Location not recorded"}
+                        {c.location}
                       </small>
                     )}
                     {columns.reservations && (

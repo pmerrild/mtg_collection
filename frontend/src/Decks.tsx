@@ -606,7 +606,18 @@ export function Decks({
     [editor, setEditor] = useState<Deck | null | undefined>(() =>
       new URLSearchParams(location.hash.split("?")[1] || "").get("new") === "1"
         ? null
-        : undefined,
+        : new URLSearchParams(location.hash.split("?")[1] || "").get("edit") ===
+            "1"
+          ? state.decks.find(
+              (d) =>
+                d.id ===
+                Number(
+                  new URLSearchParams(location.hash.split("?")[1] || "").get(
+                    "deck",
+                  ),
+                ),
+            )
+          : undefined,
     ),
     [history, setHistory] = useState(false),
     [priority, setPriority] = useState(""),

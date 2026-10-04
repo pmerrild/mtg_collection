@@ -1,7 +1,7 @@
 """Collection workflows against seeded disposable local Worker storage only."""
 import argparse,csv,io,re,time
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright,expect
 parser=argparse.ArgumentParser();parser.add_argument('--url',default='http://127.0.0.1:4182');args=parser.parse_args()
 shots=Path('/tmp/mtg-collection-qa');shots.mkdir(exist_ok=True)
 with sync_playwright() as p:
@@ -40,7 +40,7 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Actions',exact=True).click();page.get_by_role('dialog',name='Selected printing actions').get_by_role('button',name='Keep copies',exact=True).click();dialog=page.get_by_role('dialog',name='Set copies to keep')
  latest=page.request.get(args.url+'/api/state').json();card=collection[0];assert page.request.patch(args.url+'/api/locations',headers={'X-Vault-Revision':str(latest['revision'])},data={'key':card['key'],'location':'Concurrent QA'}).ok
  dialog.get_by_label('Keep at least this many copies per printing',exact=True).fill('4');dialog.get_by_role('button',name='Apply to 31 printings',exact=True).click();dialog.get_by_role('alert').wait_for();assert 'another tab' in dialog.get_by_role('alert').inner_text();dialog.get_by_role('button',name='Cancel',exact=True).click()
- page.get_by_role('button',name='Reload collection',exact=True).click();page.wait_for_timeout(300)
+ page.get_by_label('Collection actions',exact=True).click();page.get_by_role('button',name='Reload collection',exact=True).click();page.wait_for_timeout(300)
  page.get_by_role('button',name='Clear selection',exact=True).click();page.get_by_role('button',name='Duplicates',exact=True).click()
  duplicate=page.request.get(args.url+'/api/collection').json();candidate=next(c for c in duplicate if c['quantity']>1 and c['tradeable']>0)
  page.get_by_label('Search collection').fill(candidate['name']);page.get_by_role('checkbox',name='Select '+candidate['name']+' '+candidate['printing_key'],exact=True).check()
@@ -48,8 +48,8 @@ with sync_playwright() as p:
  updated=page.request.get(args.url+'/api/collection').json();assert next(c for c in updated if c['key']==candidate['key'])['tradeable']==0
  page.get_by_role('button',name='Actions',exact=True).click();page.get_by_role('dialog',name='Selected printing actions').get_by_role('button',name='Track wanted',exact=True).click();dialog=page.get_by_role('dialog',name='Track wanted copies');dialog.get_by_label('Wanted quantity per printing',exact=True).fill('2');dialog.get_by_label('Finish',exact=True).select_option('foil');dialog.get_by_role('button',name='Apply to 1 printings',exact=True).click();dialog.wait_for(state='hidden')
  assert page.request.get(args.url+'/api/state').json()['summary']['copies']==owned
- page.get_by_role('button',name='Clear filters',exact=True).last.click();page.get_by_role('button',name='Trade candidates',exact=True).click();page.get_by_role('button',name='Export',exact=True).click();dialog=page.get_by_role('dialog',name='Export for Scryfall');page.wait_for_function("document.querySelector('.export-text')?.value.length>0")
- expected=sum(c['tradeable'] for c in page.request.get(args.url+'/api/collection').json());actual=sum(int(line.split(' ',1)[0]) for line in dialog.get_by_label('Exported decklist').input_value().splitlines());assert actual==expected;page.keyboard.press('Escape')
+ page.get_by_role('button',name='Clear filters',exact=True).last.click();page.get_by_role('button',name='Trade candidates',exact=True).click();page.get_by_label('Collection actions',exact=True).click();page.get_by_role('button',name='Export',exact=True).click();dialog=page.get_by_role('dialog',name='Export for Scryfall');page.wait_for_function("document.querySelector('.export-text')?.value.length>0")
+ expected=sum(c['tradeable'] for c in page.request.get(args.url+'/api/collection').json());actual=sum(int(line.split(' ',1)[0]) for line in dialog.get_by_label('Exported decklist').input_value().splitlines());assert actual==expected;page.keyboard.press('Escape');expect(page.get_by_label('Collection actions',exact=True)).to_be_focused()
  page.set_viewport_size({'width':390,'height':844});page.get_by_role('button',name='All cards',exact=True).click();page.wait_for_timeout(100)
  assert page.evaluate('document.documentElement.scrollWidth<=innerWidth');assert page.locator('.mobile-card-row').first.bounding_box()['y']<600
  page.get_by_role('checkbox',name=re.compile('^Select ')).nth(1).check();page.screenshot(path=str(shots/'selected-mobile.png'))

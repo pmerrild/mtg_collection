@@ -6,7 +6,7 @@
   "scripts": {
     "build": "npm --prefix frontend run build && node scripts/build.mjs",
     "db:generate": "drizzle-kit generate",
-    "test": "node --test tests/hosted.test.mjs tests/roadmap.test.mjs tests/collection.test.mjs",
+    "test": "node --test tests/hosted.test.mjs tests/roadmap.test.mjs tests/collection.test.mjs tests/sets.test.mjs",
     "test:api": "node --test tests/hosted-api.test.mjs tests/roadmap-api.test.mjs"
   },
   "dependencies": {

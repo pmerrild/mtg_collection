@@ -6,7 +6,24 @@ The site version lives on its own GitHub branch, `sites/mtg-vault`, so other too
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
-## UI review and collection refinement — 2026-10-04
+## Platform structure, Overview, and set completion — 2026-10-04
+
+The stricter second review found structural problems that the earlier control improvements missed: crowded Settings, a green-tinted dark theme, an unbounded document, and no useful landing page. Independent UI and UX critics agreed on this revision, implemented on `sites/mtg-vault`:
+
+- Bounded viewport workspace with scrolling inside `main` and shared headings, surfaces, navigation, and controls. Collection has one vertical content scroll and sticky search. Mobile has six visible destinations, readable 14 px navigation, and a shared Manage menu; its first card appears before 480 px at 390 × 844.
+- Neutral graphite dark surfaces and quiet light surfaces; emerald identifies actions and selection. Light, Dark, and System are buttons only in Settings → Preferences. Browser-local persistence, first-paint behavior, OS switching, and cross-tab synchronization remain intact.
+- Settings separates Preferences, Data & prices, and Recovery. Recovery loads on demand and separates collection backups from deck revisions. Same-page deep links update the displayed section; invalid sections fall back to Preferences. Everyday choices lead, with implementation explanations in secondary disclosures.
+- Overview is the default landing page and dashboard: known ownership, unique names/printings, known value with priced-copy coverage, complete confirmed decks ready to assemble, actionable failures, quiet data coverage, deck actions, workbook freshness, and acquisition record counts. No invented trends, unknown values shown as zero, summed overlapping shortages, or incomplete decks labeled ready.
+- Collection → Set progress uses a complete validated Scryfall catalog of English paper printings including variants. Duplicate copies and foil/nonfoil count once; separate token/supplemental edition codes have separate checklists. Load/refresh is explicit. Percentage and missing count stay unknown until every included owned printing is verified. Invalid workbook rows are excluded and visibly flagged. Verified checklists offer All/Missing printings and paging.
+- Auxiliary R2 set catalogs replace prior data only after full validation; partial/invalid/unsafe/failed fetches preserve the previous complete checklist. No SQL migration, ownership edit, secret change, or production reset.
+
+Independent review caught wrong-panel Settings links, misleading set-load/failure copy, inconsistent collection actions, excess mobile spacing, and dialog focus returning to a hidden menu item. These were corrected and re-reviewed. Regression checks also corrected the sticky toolbar position in the new scrolling container. Both critics approve the final structure. Mobile set explanation length is minor remaining polish.
+
+Acceptance includes domain/API checks, five sizes in both themes, every destination/Settings section, internal scroll bounds, 200% text, keyboard navigation/focus return, System persistence, existing editing/recovery/export/filter/Undo workflows, and provisional/offline/verified set states. See SITES_VALIDATION.md for results and limits.
+
+Next work needs trustworthy source facts: resolve the invalid workbook row, confirm exact printing matches/live price coverage, and enter complete intended decklists. Then evaluate physical assembly, receipt reconciliation, and condition/language/etched-finish conventions with actual examples. Do not fill the dashboard with speculative charts or extend scope after acceptance.
+
+## Earlier UI review and collection refinement — 2026-10-04
 
 Implemented and reviewed on `sites/mtg-vault`:
 

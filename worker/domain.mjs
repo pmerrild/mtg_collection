@@ -363,6 +363,7 @@ export class Inventory {
             c?.image_uris?.normal ||
             c?.card_faces?.find((f) => f.image_uris)?.image_uris?.normal ||
             null,
+          scryfall_id: c?.id || null,
           scryfall_url: c?.scryfall_uri || null,
           oracle_text:
             c?.oracle_text ||

@@ -89,6 +89,7 @@ export type Card = {
   match_message: string;
   image_url: string | null;
   image_faces: { name: string; url: string }[];
+  scryfall_id: string | null;
   scryfall_url: string | null;
   oracle_text: string;
   mana_cost: string;
@@ -253,4 +254,23 @@ export type BulkUndo = {
   revision: number;
   action: string;
   count: number;
+};
+
+export type SetProgress = {
+  code: string;
+  name: string | null;
+  owned_printings: number;
+  copies: number;
+  total: number | null;
+  verified_owned: number;
+  needs_verification: number;
+  percent: number | null;
+  missing_count: number | null;
+  fetched_at: string | null;
+  scope: string;
+};
+export type SetChecklist = SetProgress & {
+  items: { id: string; name: string; number: string; owned: boolean }[];
+  count: number;
+  pages: number;
 };

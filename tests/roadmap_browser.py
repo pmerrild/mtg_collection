@@ -8,7 +8,7 @@ shots=Path('/tmp/mtg-roadmap-qa');shots.mkdir(exist_ok=True)
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path=args.browser,headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
  page=browser.new_page(viewport={'width':1440,'height':1050});errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
- page.goto(args.url);existing=page.request.get(args.url+'/api/state').json()
+ page.goto(args.url+'/#collection');existing=page.request.get(args.url+'/api/state').json()
  for d in existing['decks']:
   if d['name']=='Roadmap browser deck':
    latest=page.request.get(args.url+'/api/state').json();page.request.delete(args.url+'/api/decks/'+str(d['id']),headers={'X-Vault-Revision':str(latest['revision'])})
@@ -58,7 +58,7 @@ with sync_playwright() as p:
  page.get_by_role('navigation').get_by_role('button',name='Settings',exact=True).click();page.get_by_label('Display currency').select_option('USD');page.wait_for_timeout(500);page.get_by_label('Display currency').select_option('EUR')
  page.set_viewport_size({'width':390,'height':844});page.get_by_role('navigation').get_by_role('button',name='Collection',exact=True).click();page.get_by_role('heading',name='Collection',exact=True).wait_for()
  assert page.locator('.mobile-card-row').first.bounding_box()['y']<600
- assert page.get_by_role('navigation').get_by_role('button').count()==5
+ assert page.get_by_role('navigation').get_by_role('button').count()==6
  assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
  page.screenshot(path=str(shots/'collection-mobile.png'))
  page.get_by_label('Search collection').fill('Abhorrent Oculus');page.get_by_role('button',name=re.compile('^Abhorrent Oculus')).click();page.get_by_role('dialog',name='Abhorrent Oculus').wait_for();page.keyboard.press('Escape')

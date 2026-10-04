@@ -50,21 +50,27 @@ export function useTheme() {
 }
 export function ThemeControl() {
   const { mode, setMode } = useTheme();
-  const Icon = mode === "system" ? Monitor : mode === "dark" ? Moon : Sun;
   return (
-    <label className="theme-control">
-      <Icon size={17} aria-hidden="true" />
-      <span className="sr-only">Appearance</span>
-      <select
-        aria-label="Appearance"
-        value={mode}
-        onChange={(e) => setMode(e.target.value as ThemeMode)}
-      >
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </label>
+    <div className="theme-buttons" role="group" aria-label="Appearance">
+      {(
+        [
+          { value: "light", label: "Light", Icon: Sun },
+          { value: "dark", label: "Dark", Icon: Moon },
+          { value: "system", label: "System", Icon: Monitor },
+        ] as const
+      ).map(({ value, label, Icon }) => (
+        <button
+          type="button"
+          className={`theme-button ${mode === value ? "selected" : ""}`}
+          key={value}
+          aria-pressed={mode === value}
+          onClick={() => setMode(value)}
+        >
+          <Icon size={20} aria-hidden="true" />
+          <span>{label}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 export function usePreference<T>(

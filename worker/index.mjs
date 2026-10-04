@@ -1,3 +1,4 @@
+import { handleSets } from "./sets.mjs";
 import { filterCollection } from "../shared/collection.mjs";
 import {
   Inventory,
@@ -740,6 +741,17 @@ export default {
         await save(env, s, revision);
         return json(s.settings);
       }
+      const setResult = await handleSets({
+        env,
+        s,
+        path,
+        q,
+        method,
+        json,
+        cardRows,
+        scryfall,
+      });
+      if (setResult) return setResult;
       const roadmap = await handleRoadmap({
         request,
         env,

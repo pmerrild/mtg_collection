@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Archive,
+  LayoutDashboard,
   BookOpen,
   CheckCircle2,
   CircleAlert,
@@ -20,14 +21,33 @@ import { Decks } from "./Decks";
 import { Missing } from "./Missing";
 import { Review } from "./Review";
 import { Settings } from "./Settings";
-import { ThemeControl, useTheme } from "./theme";
+import { useTheme } from "./theme";
 import "./theme.css";
 import "./styles.css";
-type Page = "collection" | "decks" | "missing" | "review" | "settings";
-const pages: Page[] = ["collection", "decks", "missing", "review", "settings"];
+import "./workspace.css";
+import { Overview } from "./Overview";
+import { Sets } from "./Sets";
+type Page =
+  | "overview"
+  | "sets"
+  | "collection"
+  | "decks"
+  | "missing"
+  | "review"
+  | "settings";
+const pages: Page[] = [
+  "overview",
+  "sets",
+  "collection",
+  "decks",
+  "missing",
+  "review",
+  "settings",
+];
 const fromHash = (): Page => {
-  const p = location.hash.slice(1).split("?")[0] as Page;
-  return pages.includes(p) ? p : "collection";
+  const path = location.hash.slice(1).split("?")[0];
+  const p = (path === "collection/sets" ? "sets" : path) as Page;
+  return pages.includes(p) ? p : "overview";
 };
 function App() {
   useTheme();
@@ -42,10 +62,9 @@ function App() {
     [undoBusy, setUndoBusy] = useState(false),
     [exportParams, setExportParams] = useState<Record<string, string> | null>(
       null,
-    ),
-    [missingDeck, setMissingDeck] = useState<number | undefined>();
+    );
   const fileRef = useRef<HTMLInputElement>(null),
-    lastHash = useRef(location.hash || "#collection"),
+    lastHash = useRef(location.hash || "#overview"),
     toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -61,7 +80,7 @@ function App() {
     setState(snapshot);
     setCollection(cards);
   }, []);
-  const navigate = useCallback((next: Page) => {
+  const navigate = useCallback((next: string) => {
     const event = new Event("mtg-before-navigate", { cancelable: true });
     if (!window.dispatchEvent(event)) return;
     location.hash = next;
@@ -73,8 +92,8 @@ function App() {
         : lastHash.current;
       const event = new Event("mtg-before-navigate", { cancelable: true });
       if (!window.dispatchEvent(event)) {
-        history.replaceState(null, "", previousHash || "#collection");
-        lastHash.current = previousHash || "#collection";
+        history.replaceState(null, "", previousHash || "#overview");
+        lastHash.current = previousHash || "#overview";
         return;
       }
       lastHash.current = location.hash;
@@ -171,6 +190,9 @@ function App() {
     });
     return () => lifecycle.abort();
   }, []);
+  useEffect(() => {
+    document.getElementById("main-content")?.scrollTo({ top: 0 });
+  }, [page]);
   const run = async (fn: () => Promise<unknown>, message?: string) => {
     setBusy(true);
     setError("");
@@ -187,6 +209,7 @@ function App() {
     }
   };
   const nav = [
+    { page: "overview" as Page, label: "Overview", icon: LayoutDashboard },
     { page: "collection" as Page, label: "Collection", icon: Archive },
     { page: "decks" as Page, label: "Decks", icon: Layers3 },
     { page: "missing" as Page, label: "Missing", icon: BookOpen },
@@ -238,9 +261,6 @@ function App() {
         Skip to workspace
       </a>
       <aside className="sidebar">
-        <div className="mobile-theme">
-          <ThemeControl />
-        </div>
         <div className="brand">
           <div className="brand-symbol">
             <Layers3 size={23} />
@@ -254,9 +274,13 @@ function App() {
           {nav.map((n) => (
             <button
               key={n.page}
-              className={`nav-item ${page === n.page ? "active" : ""}`}
+              className={`nav-item ${page === n.page || (page === "sets" && n.page === "collection") ? "active" : ""}`}
               onClick={() => navigate(n.page)}
-              aria-current={page === n.page ? "page" : undefined}
+              aria-current={
+                page === n.page || (page === "sets" && n.page === "collection")
+                  ? "page"
+                  : undefined
+              }
             >
               <n.icon size={19} />
               <span>{n.label}</span>
@@ -275,13 +299,16 @@ function App() {
         <header className="topbar">
           <span>
             Workspace /{" "}
-            <strong>{nav.find((n) => n.page === page)?.label}</strong>
+            <strong>
+              {page === "sets"
+                ? "Collection / Sets"
+                : nav.find((n) => n.page === page)?.label}
+            </strong>
           </span>
           <div className="topbar-meta">
             <span className="topbar-status">
               Saved workbook · {date(state.last_import?.created_at)}
             </span>
-            <ThemeControl />
           </div>
         </header>
         <main id="main-content" tabIndex={-1}>
@@ -309,6 +336,14 @@ function App() {
               </button>
             </div>
           )}
+          {page === "overview" && (
+            <Overview
+              state={state}
+              collection={collection}
+              openImport={openImport}
+            />
+          )}
+          {page === "sets" && <Sets {...props} />}
           {page === "collection" && (
             <Collection
               {...props}
@@ -328,15 +363,20 @@ function App() {
               {...props}
               exportList={setExportParams}
               openMissing={(id) => {
-                setMissingDeck(id);
-                navigate("missing");
+                navigate(`missing?deck=${id}`);
               }}
             />
           )}
           {page === "missing" && (
             <Missing
               {...props}
-              initialDeck={missingDeck}
+              initialDeck={
+                Number(
+                  new URLSearchParams(location.hash.split("?")[1] || "").get(
+                    "deck",
+                  ),
+                ) || undefined
+              }
               exportList={setExportParams}
             />
           )}
@@ -347,7 +387,10 @@ function App() {
         </main>
         <footer className="app-footer">
           <span>Input imported {date(state.last_import?.created_at)}</span>
-          <button className="text-button" onClick={() => navigate("settings")}>
+          <button
+            className="text-button"
+            onClick={() => navigate("settings?section=data")}
+          >
             <RefreshCw size={14} />
             {state.price_job.running
               ? `Refreshing Scryfall ${state.price_job.completed}/${state.price_job.total}`

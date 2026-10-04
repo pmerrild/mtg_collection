@@ -572,3 +572,67 @@ test("Bulk undo restores exact prior location/keep values and refuses later writ
   );
   assert.equal(JSON.stringify(state().holdings), before);
 });
+
+test("Set checklist API uses complete catalog and matched printing IDs without modifying ownership", async () => {
+  reset();
+  const before = JSON.stringify(state().holdings),
+    originalFetch = globalThis.fetch;
+  const ids = [
+    "00000000-0000-0000-0000-000000000001",
+    "00000000-0000-0000-0000-000000000002",
+  ];
+  const cards = ids.map((id, index) => ({
+    id,
+    name: "Sol Ring",
+    set: "cmm",
+    collector_number: String(index + 1),
+    lang: "en",
+    games: ["paper"],
+    prices: {},
+  }));
+  const uncached = await good("/sets/cmm");
+  assert.equal(uncached.percent, null);
+  assert.equal(uncached.total, null);
+  globalThis.fetch = async (url) =>
+    new Response(
+      JSON.stringify(
+        String(url).includes("/sets/cmm")
+          ? { object: "set", code: "cmm", name: "Commander Masters" }
+          : { object: "list", data: cards, total_cards: 2, has_more: false },
+      ),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  try {
+    await good("/sets/cmm/refresh", "POST");
+    let value = await good("/sets/cmm");
+    assert.equal(value.total, 2);
+    assert.equal(value.percent, null);
+    assert.equal(value.needs_verification, 1);
+    assert.equal((await request("/sets/cmm?view=missing")).status, 400);
+    const current = state();
+    current.matches["cmm:1"] = { status: "matched", card_id: ids[0] };
+    sql
+      .prepare("UPDATE vault SET payload=?,revision=revision+1 WHERE id=1")
+      .run(JSON.stringify(current));
+    sql
+      .prepare("INSERT INTO cards (id,payload,fetched_at) VALUES (?,?,?)")
+      .run(ids[0], JSON.stringify(cards[0]), new Date().toISOString());
+    value = await good("/sets/cmm?view=missing");
+    assert.equal(value.percent, 50);
+    assert.equal(value.items.length, 1);
+    assert.equal(value.items[0].number, "2");
+    assert.equal(value.items[0].name, "Sol Ring");
+    assert.equal(value.items[0].owned, false);
+    assert.equal((await good("/sets")).items[0].name, "Commander Masters");
+    const saved = blobs.get("set-catalogs/cmm.json").value;
+    globalThis.fetch = async () => {
+      throw Error("offline");
+    };
+    assert.equal((await request("/sets/cmm/refresh", "POST")).status, 400);
+    assert.equal(blobs.get("set-catalogs/cmm.json").value, saved);
+    assert.equal(JSON.stringify(state().holdings), before);
+    assert.equal((await request("/sets/unknown/refresh", "POST")).status, 400);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
