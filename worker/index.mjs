@@ -3,7 +3,26 @@ import {parseWorkbook,MAX_BYTES} from './importer.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json;charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const now=()=>new Date().toISOString();
 const formats=new Set(['commander','casual60','standard','modern','pioneer','legacy','vintage','pauper']);
-async function load(env){if(!env.DB)throw Error('Collection storage is unavailable. Please try again.');let row=await env.DB.prepare('SELECT revision,payload FROM vault WHERE id=1').first();if(!row){const s=freshState();s.settings.workbook_path='No workbook uploaded';s.price_job={...s.price_job,attempted_at:now()};await env.DB.prepare('INSERT OR IGNORE INTO vault (id,revision,payload) VALUES (1,0,?)').bind(JSON.stringify(s)).run();row=await env.DB.prepare('SELECT revision,payload FROM vault WHERE id=1').first();}return {s:JSON.parse(row.payload),revision:row.revision};}
+async function load(env){
+ if(!env.DB)throw Error('Collection storage is unavailable. Please try again.');
+ let row=await env.DB.prepare('SELECT revision,payload FROM vault WHERE id=1').first();
+ if(!row){const state=freshState();state.settings.workbook_path='No workbook uploaded';state.price_job={...state.price_job,attempted_at:now()};await env.DB.prepare('INSERT OR IGNORE INTO vault (id,revision,payload) VALUES (1,0,?)').bind(JSON.stringify(state)).run();row=await env.DB.prepare('SELECT revision,payload FROM vault WHERE id=1').first();}
+ const s=JSON.parse(row.payload);
+ // Optional private bootstrap data is a runtime secret, never source or browser data.
+ if(env.INITIAL_INVENTORY_SNAPSHOT&&!s.last_import&&!s.holdings.length){
+  const bytes=Uint8Array.from(atob(env.INITIAL_INVENTORY_SNAPSHOT),c=>c.charCodeAt(0));
+  const text=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  if(text.length>1200000)throw Error('Initial inventory exceeds the supported snapshot size.');
+  const p=JSON.parse(text);if(!Array.isArray(p.holdings)||!Array.isArray(p.issues)||typeof p.fingerprint!=='string')throw Error('Initial inventory snapshot is invalid.');
+  const id='initial-'+p.fingerprint.slice(0,12);
+  if(!env.BUCKET)throw Error('Workbook storage is unavailable.');
+  await env.BUCKET.put('initial/import-snapshot.json',text,{httpMetadata:{contentType:'application/json'}});
+  applySnapshot(s,p,id);s.history=[{id,created_at:s.last_import.created_at,source:p.source,status:'applied'}];
+  await env.DB.prepare('INSERT OR IGNORE INTO imports (id,fingerprint,created_at,source,status,payload) VALUES (?,?,?,?,?,?)').bind(id,p.fingerprint,s.last_import.created_at,p.source,'initial',text).run();
+  await save(env,s,row.revision);return {s,revision:row.revision+1};
+ }
+ return {s,revision:row.revision};
+}
 async function save(env,s,revision){const payload=JSON.stringify(s);if(new TextEncoder().encode(payload).length>1800000)throw Error('Collection storage is full. Download a backup and reduce the inventory size.');const r=await env.DB.prepare('UPDATE vault SET payload=?,revision=revision+1 WHERE id=1 AND revision=?').bind(payload,revision).run();if(!r.meta.changes)throw Error('The collection changed in another tab. Refresh and try again.');}
 async function cardRows(env){const {results}=await env.DB.prepare('SELECT payload,fetched_at FROM cards').all();return results.map(r=>({...JSON.parse(r.payload),fetched_at:r.fetched_at}));}
 async function putCards(env,cards){if(!cards.length)return;for(let i=0;i<cards.length;i+=50)await env.DB.batch(cards.slice(i,i+50).map(c=>env.DB.prepare('INSERT INTO cards (id,payload,fetched_at) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,fetched_at=excluded.fetched_at').bind(c.id,JSON.stringify(c),now())));}
