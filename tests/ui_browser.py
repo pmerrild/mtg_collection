@@ -17,11 +17,11 @@ with sync_playwright() as p:
  theme('dark');page.reload();page.get_by_role('heading',name='Collection',exact=True).wait_for();assert page.evaluate('document.documentElement.dataset.theme')=='dark'
  for mode in ['light','dark']:
   theme(mode)
-  for nav in ['Collection','Decks','Settings']:
+  for nav in ['Collection','Decks','Review','Settings']:
    page.get_by_role('navigation').get_by_role('button',name=nav,exact=True).click();page.wait_for_timeout(150)
    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),(mode,nav)
    panel=page.locator('.table-panel').first
-   if panel.count():assert panel.evaluate("e=>getComputedStyle(e).backgroundColor")==('rgb(26, 30, 36)' if mode=='dark' else 'rgb(255, 255, 255)'),(mode,nav)
+   if panel.count():assert panel.evaluate("e=>getComputedStyle(e).backgroundColor")==('rgb(24, 26, 29)' if mode=='dark' else 'rgb(255, 255, 255)'),(mode,nav)
   assert page.get_by_role('group',name='Appearance',exact=True).get_by_role('button',name=mode.title(),exact=True).get_attribute('aria-pressed')=='true'
   page.get_by_role('navigation').get_by_role('button',name='Collection',exact=True).click()
  page.get_by_role('heading',name='Collection',exact=True).wait_for();page.wait_for_timeout(50);page.keyboard.press('/');assert page.get_by_label('Search collection').evaluate('e=>e===document.activeElement')
@@ -66,7 +66,7 @@ with sync_playwright() as p:
  page.locator('main').evaluate('e=>e.scrollTop=900');page.wait_for_timeout(100);assert abs(page.locator('.collection-controls').bounding_box()['y']-page.locator('main').bounding_box()['y'])<2
  for mode in ['light','dark']:
   page.locator('main').evaluate('e=>e.scrollTop=0');theme(mode)
-  for nav in ['Collection','Decks','Settings']:
+  for nav in ['Collection','Decks','Review','Settings']:
    page.get_by_role('navigation').get_by_role('button',name=nav,exact=True).click();page.wait_for_timeout(100);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),('mobile',mode,nav)
  page.set_viewport_size({'width':700,'height':1000});page.evaluate("document.documentElement.style.fontSize='32px'");page.get_by_role('navigation').get_by_role('button',name='Collection',exact=True).click();assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),'200% text overflow'
  page.get_by_role('button',name=re.compile('^Filters')).click();assert page.evaluate('document.documentElement.scrollWidth<=innerWidth');page.keyboard.press('Escape')

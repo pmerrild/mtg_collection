@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
 export type ThemeMode = "system" | "light" | "dark";
 const key = "mtg-vault-theme";
 function read(): ThemeMode {
@@ -54,11 +53,11 @@ export function ThemeControl() {
     <div className="theme-buttons" role="group" aria-label="Appearance">
       {(
         [
-          { value: "light", label: "Light", Icon: Sun },
-          { value: "dark", label: "Dark", Icon: Moon },
-          { value: "system", label: "System", Icon: Monitor },
+          { value: "light", label: "Light" },
+          { value: "dark", label: "Dark" },
+          { value: "system", label: "System" },
         ] as const
-      ).map(({ value, label, Icon }) => (
+      ).map(({ value, label }) => (
         <button
           type="button"
           className={`theme-button ${mode === value ? "selected" : ""}`}
@@ -66,7 +65,6 @@ export function ThemeControl() {
           aria-pressed={mode === value}
           onClick={() => setMode(value)}
         >
-          <Icon size={20} aria-hidden="true" />
           <span>{label}</span>
         </button>
       ))}

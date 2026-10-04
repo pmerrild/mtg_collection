@@ -1,4 +1,4 @@
-"""Three-section working UI regression against disposable local storage; long-content/save fixtures stay browser-local."""
+"""Four-section working UI regression against disposable local storage; long-content/save fixtures stay browser-local."""
 import argparse,copy,json
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
@@ -14,7 +14,7 @@ with sync_playwright() as p:
  for mode in ['light','dark']:
   go('Settings');page.get_by_role('tab',name='Preferences',exact=True).click();page.get_by_role('group',name='Appearance').get_by_role('button',name=mode.title(),exact=True).click()
   for width,height in [(1366,768),(1280,720),(1024,768),(820,700),(701,700),(700,700),(390,844),(360,640)]:
-   page.set_viewport_size({'width':width,'height':height});assert nav.get_by_role('button').count()==3
+   page.set_viewport_size({'width':width,'height':height});assert nav.get_by_role('button').count()==4
    go('Collection');bounds((mode,width,'collection'));page.screenshot(path=str(shots/f'collection-{mode}-{width}.png'))
    table=page.locator('.desktop-collection');rows=page.locator('.mobile-card-list')
    if table.is_visible():assert table.evaluate('e=>e.scrollWidth<=e.clientWidth+1')
@@ -39,7 +39,7 @@ with sync_playwright() as p:
   else:route.continue_()
  page.route('**/api/decks/'+str(deck['id']),hold_save);editor.get_by_role('button',name='Save deck',exact=True).click();page.wait_for_timeout(100);assert held;expect(editor.get_by_label('Card name 101',exact=True)).to_be_disabled();go('Collection');assert editor.is_visible() and 'edit=1' in page.url;held.pop().fulfill(status=503,content_type='application/json',body='{"detail":"Controlled save rejection"}');alert=editor.get_by_role('alert').filter(has_text='Controlled save rejection');alert.wait_for();assert alert.bounding_box()['y']>=main.bounding_box()['y'] and alert.bounding_box()['y']<768-50;assert validation;[r.fulfill(content_type='application/json',body=json.dumps(deck)) for r in validation];page.wait_for_timeout(100);expect(alert).to_be_visible();page.unroute('**/api/decks/validate');expect(editor.get_by_label('Card name 101',exact=True)).to_be_enabled();expect(editor.get_by_label('Card name 101',exact=True)).to_have_value('QA new draft card');editor.get_by_role('button',name='Cancel',exact=True).click();page.get_by_role('dialog',name='Unsaved deck changes').get_by_role('button',name='Discard changes',exact=True).click()
  page.goto(args.url+'/#decks?deck='+str(deck['id'])+'&edit=1');editor=page.get_by_role('region',name='Deck editor');editor.get_by_label('Card name 1',exact=True).wait_for();editor.get_by_role('button',name='Save deck',exact=True).click();page.wait_for_timeout(100);assert held;go('Settings');assert editor.is_visible();expect(editor.get_by_label('Card name 1',exact=True)).to_be_disabled();held.pop().fulfill(status=503,content_type='application/json',body='{"detail":"Controlled unchanged save rejection"}');editor.get_by_role('alert').filter(has_text='Controlled unchanged').wait_for();editor.get_by_role('button',name='Cancel',exact=True).click()
- page.unroute('**/api/state');page.unroute('**/api/decks/'+str(deck['id']));page.goto(args.url+'/#review');page.get_by_role('heading',name='Collection data',exact=True).wait_for();assert '#settings?section=data&review=1' in page.url;page.goto(args.url+'/#missing');page.get_by_role('heading',name='Compare decks',exact=True).wait_for();assert '#decks?view=missing' in page.url
+ page.unroute('**/api/state');page.unroute('**/api/decks/'+str(deck['id']));page.goto(args.url+'/#review');page.get_by_role('heading',name='Review',exact=True).wait_for();assert '#review' in page.url;page.goto(args.url+'/#missing');page.get_by_role('heading',name='Compare decks',exact=True).wait_for();assert '#decks?view=missing' in page.url
  page.goto(args.url+'/#overview');page.get_by_role('heading',name='Collection',exact=True).wait_for();assert '#collection' in page.url
  assert page.request.get(args.url+'/api/state').json()['summary']['copies']==owned;assert not errors,errors;browser.close()
-print('Passed three-section navigation, 8 widths/two actual themes, early deck rows, inline editor/mobile order, compact density, mixed selection/sticky Actions, pagination focus/start, all columns, long chips/names, 100-card Add focus, dirty/busy guards, disabled editing during rejected save, legacy aliases; no inventory writes or browser errors.')
+print('Passed four-section navigation, 8 widths/two actual themes, early deck rows, inline editor/mobile order, compact density, mixed selection/sticky Actions, pagination focus/start, all columns, long chips/names, 100-card Add focus, dirty/busy guards, disabled editing during rejected save, legacy aliases; no inventory writes or browser errors.')

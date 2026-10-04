@@ -20,7 +20,7 @@ with sync_playwright() as p:
   go('Settings');page.get_by_role('group',name='Appearance').get_by_role('button',name=mode.title(),exact=True).click()
   for width,height in [(1366,768),(1280,720),(1024,768),(820,700),(701,700),(390,844),(360,640)]:
    page.set_viewport_size({'width':width,'height':height})
-   for label in ['Collection','Decks','Settings']:
+   for label in ['Collection','Decks','Review','Settings']:
     go(label);bounds((mode,width,height,label))
     assert page.get_by_role('combobox',name='Appearance',exact=True).count()==0
     if label!='Settings':assert page.get_by_role('group',name='Appearance',exact=True).count()==0
@@ -38,7 +38,7 @@ with sync_playwright() as p:
  go('Collection');page.set_viewport_size({'width':390,'height':844});first_y=page.locator('.mobile-card-row').first.bounding_box()['y'];assert first_y<480,first_y
  page.get_by_role('button',name='Filters',exact=True).click();page.get_by_role('dialog',name='Filters and saved views').wait_for();page.screenshot(path=str(shots/'filter-dark-390.png'));page.keyboard.press('Escape')
  page.set_viewport_size({'width':700,'height':1000});page.evaluate("document.documentElement.style.fontSize='32px'")
- for label in ['Collection','Decks','Settings']:go(label);bounds(('200% text',label))
+ for label in ['Collection','Decks','Review','Settings']:go(label);bounds(('200% text',label))
  page.get_by_role('tab',name='Data & prices',exact=True).click();bounds('200% settings-data');page.get_by_role('tab',name='Recovery',exact=True).click();bounds('200% recovery')
  page.evaluate("document.documentElement.style.fontSize='16px'");page.set_viewport_size({'width':1366,'height':768})
  # Full, partial-ownership and offline set responses are fixtures in this browser only.

@@ -13,6 +13,7 @@ import type { BulkUndo, Card, Snapshot } from "./types";
 import { api, ExportDialog, setRevision } from "./ui";
 import { Collection } from "./Collection";
 import { Decks } from "./Decks";
+import { Review } from "./Review";
 import { Settings } from "./Settings";
 import { useTheme } from "./theme";
 import "./theme.css";
@@ -21,17 +22,24 @@ import "./workspace.css";
 import "./interface.css";
 
 import { Sets } from "./Sets";
-type Page = "collection" | "sets" | "decks" | "settings";
+type Page = "collection" | "sets" | "decks" | "review" | "settings";
 function canonicalHash(hash: string) {
   const [path, query = ""] = hash.replace(/^#/, "").split("?");
   const params = new URLSearchParams(query);
-  if (path === "review") return "settings?section=data&review=1";
+  if (path === "settings" && params.get("review") === "1")
+    return "review?view=workbook";
   if (path === "missing") {
     params.set("view", "missing");
     return "decks?" + params;
   }
   if (path === "overview" || !path) return "collection";
-  return ["collection", "collection/sets", "decks", "settings"].includes(path)
+  return [
+    "collection",
+    "collection/sets",
+    "decks",
+    "review",
+    "settings",
+  ].includes(path)
     ? path + (query ? "?" + query : "")
     : "collection";
 }
@@ -53,6 +61,7 @@ function App() {
     [exportParams, setExportParams] = useState<Record<string, string> | null>(
       null,
     );
+  const errorRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null),
     lastHash = useRef(location.hash || "#collection"),
     toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -198,6 +207,10 @@ function App() {
       return true;
     } catch (e) {
       setError((e as Error).message);
+      requestAnimationFrame(() => {
+        errorRef.current?.focus({ preventScroll: true });
+        errorRef.current?.scrollIntoView({ block: "start" });
+      });
       return false;
     } finally {
       setBusy(false);
@@ -206,6 +219,7 @@ function App() {
   const nav = [
     { page: "collection" as Page, label: "Collection", icon: Archive },
     { page: "decks" as Page, label: "Decks", icon: Layers3 },
+    { page: "review" as Page, label: "Review", icon: CheckCircle2 },
     { page: "settings" as Page, label: "Settings", icon: Settings2 },
   ];
   if (!state)
@@ -283,7 +297,12 @@ function App() {
       <div className="main-shell">
         <main id="main-content" tabIndex={-1}>
           {error && (
-            <div role="alert" className="notice danger">
+            <div
+              role="alert"
+              className="notice danger"
+              ref={errorRef}
+              tabIndex={-1}
+            >
               <CircleAlert size={18} />
               <span>{error}</span>
               <button
@@ -295,23 +314,17 @@ function App() {
               </button>
             </div>
           )}
-          {state.pending_import &&
-            !(
-              page === "settings" &&
-              new URLSearchParams(location.hash.split("?")[1] || "").get(
-                "review",
-              ) === "1"
-            ) && (
-              <div className="notice warning">
-                <span>A complete workbook snapshot is waiting for review.</span>
-                <button
-                  className="button secondary small"
-                  onClick={() => navigate("review")}
-                >
-                  Review snapshot
-                </button>
-              </div>
-            )}
+          {state.pending_import && page !== "review" && (
+            <div className="notice warning">
+              <span>A complete workbook snapshot is waiting for review.</span>
+              <button
+                className="button secondary small"
+                onClick={() => navigate("review")}
+              >
+                Review snapshot
+              </button>
+            </div>
+          )}
           {page === "sets" && <Sets {...props} />}
           {page === "collection" && (
             <Collection
@@ -330,6 +343,7 @@ function App() {
           {page === "decks" && (
             <Decks {...props} exportList={setExportParams} />
           )}
+          {page === "review" && <Review {...props} openImport={openImport} />}
           {page === "settings" && (
             <Settings {...props} openImport={openImport} />
           )}

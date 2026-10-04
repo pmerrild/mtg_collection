@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Check, FileSpreadsheet, Loader2, Search } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Check, Loader2, Search } from "lucide-react";
 import type { Issues, ScryCard, ViewProps } from "./types";
 import { api, date, Dialog, Empty, ImpactList, Pagination } from "./ui";
 const statuses: Record<string, string> = {
@@ -13,10 +13,12 @@ function MatchDialog({
   item,
   close,
   reload,
+  openingRevision,
 }: {
   item: Issues["matches"][number];
   close: () => void;
   reload: () => Promise<void>;
+  openingRevision: number;
 }) {
   const [query, setQuery] = useState(item.name),
     [cards, setCards] = useState<ScryCard[]>([]),
@@ -79,10 +81,15 @@ function MatchDialog({
             onClick={async () => {
               setBusy(true);
               try {
-                await api("/matches/confirm", "POST", {
-                  printing_key: item.printing_key,
-                  card_id: c.id,
-                });
+                await api(
+                  "/matches/confirm",
+                  "POST",
+                  {
+                    printing_key: item.printing_key,
+                    card_id: c.id,
+                  },
+                  openingRevision,
+                );
                 await reload();
                 close();
               } catch (e) {
@@ -120,13 +127,26 @@ export function Review({
   busy,
   reload,
   openImport,
-  embedded = false,
-}: ViewProps & { openImport: () => void; embedded?: boolean }) {
+}: ViewProps & { openImport: () => void }) {
+  const readRoute = () => {
+    const p = new URLSearchParams(location.hash.split("?")[1] || "");
+    return {
+      view: p.get("view") === "matching" ? "matching" : "workbook",
+      query: p.get("q") || "",
+      status: p.get("status") || "",
+    };
+  };
+  const [view, setView] = useState(readRoute().view),
+    [retry, setRetry] = useState(0);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const [review, setReview] = useState<Issues | null>(null),
     [error, setError] = useState(""),
-    [match, setMatch] = useState<Issues["matches"][number] | null>(null),
-    [query, setQuery] = useState(""),
-    [status, setStatus] = useState(""),
+    [match, setMatch] = useState<{
+      item: Issues["matches"][number];
+      revision: number;
+    } | null>(null),
+    [query, setQuery] = useState(readRoute().query),
+    [status, setStatus] = useState(readRoute().status),
     [page, setPage] = useState(0),
     [changePage, setChangePage] = useState(0),
     [rowPage, setRowPage] = useState(0),
@@ -147,7 +167,35 @@ export function Review({
     return () => {
       cancelled = true;
     };
-  }, [state]);
+  }, [state, retry]);
+  useEffect(() => {
+    const sync = () => {
+      if (!location.hash.startsWith("#review")) return;
+      const route = readRoute();
+      setView(route.view);
+      setQuery(route.query);
+      setStatus(route.status);
+      setPage(0);
+      document.getElementById("main-content")?.scrollTo({ top: 0 });
+    };
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+  const updateFilter = (q: string, st: string) => {
+    setQuery(q);
+    setStatus(st);
+    const params = new URLSearchParams({ view: "matching" });
+    if (q) params.set("q", q);
+    if (st) params.set("status", st);
+    history.replaceState(null, "", "#review?" + params);
+  };
+  const matchingPage = (next: number) => {
+    setPage(next);
+    requestAnimationFrame(() => {
+      resultsRef.current?.focus();
+      resultsRef.current?.scrollIntoView({ block: "start" });
+    });
+  };
   useEffect(() => setPage(0), [query, status]);
   useEffect(() => setChangePage(0), [changeQuery, state.pending_import?.id]);
   const matches = (review?.matches || []).filter(
@@ -173,282 +221,349 @@ export function Review({
   const rowPages = Math.max(1, Math.ceil((review?.rows.length || 0) / 20)),
     rp = Math.min(rowPage, rowPages - 1);
   return (
-    <>
+    <div className="review-workspace">
       <div className="page-heading">
-        <div>
-          <p className="eyebrow">KEEP YOUR INVENTORY ACCURATE</p>
-          {embedded ? <h2>Collection data</h2> : <h1>Import review</h1>}
-          <p className="subtitle">
-            Complete snapshot changes, source issues, matching, and import
-            history.
-          </p>
-        </div>
+        <h1>Review</h1>
         <button className="button primary" disabled={busy} onClick={openImport}>
-          <FileSpreadsheet size={16} /> Import saved workbook
+          Import workbook
         </button>
       </div>
+      <nav className="section-tabs" aria-label="Review views">
+        <a
+          href="#review?view=workbook"
+          className={view === "workbook" ? "active" : ""}
+          aria-current={view === "workbook" ? "page" : undefined}
+        >
+          Workbook
+        </a>
+        <a
+          href="#review?view=matching"
+          className={view === "matching" ? "active" : ""}
+          aria-current={view === "matching" ? "page" : undefined}
+        >
+          Matching
+        </a>
+      </nav>
       {error && (
-        <p role="alert" className="notice danger">
-          {error}
-        </p>
-      )}
-      {pending && (
-        <section className="review-panel table-panel">
-          <h2>Review {pending.source}</h2>
-          <p>
-            {pending.before_copies ?? state.summary.copies} current copies →{" "}
-            {pending.copies} proposed known copies across {pending.rows} rows.
-          </p>
-          <p className="hint">
-            Every upload is a complete replacement snapshot. Deck targets and
-            printing corrections are preserved; manual reservations are
-            recomputed against the new inventory. A backup is saved before
-            applying.
-          </p>
-          <label className="search-field">
-            <Search size={18} />
-            <input
-              aria-label="Search snapshot changes"
-              placeholder="Search changes"
-              value={changeQuery}
-              onChange={(e) => setChangeQuery(e.target.value)}
-            />
-          </label>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Change</th>
-                  <th>Card / printing</th>
-                  <th>Finish</th>
-                  <th>Before</th>
-                  <th>After</th>
-                  <th>New Excel rows</th>
-                </tr>
-              </thead>
-              <tbody>
-                {changes.slice(cp * 20, (cp + 1) * 20).map((c, i) => (
-                  <tr key={i}>
-                    <td>{c.kind || "Reduction"}</td>
-                    <td>
-                      {c.name}
-                      <small>{c.printing_key}</small>
-                    </td>
-                    <td>{c.finish}</td>
-                    <td>{c.before}</td>
-                    <td>{c.after}</td>
-                    <td>{c.source_rows?.join(", ") || "Removed"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!changes.length && (
-            <p>
-              No quantity or finish changes match. Source annotations or invalid
-              rows may still differ.
-            </p>
-          )}
-          <Pagination
-            page={cp}
-            pages={changePages}
-            setPage={setChangePage}
-            label="Change page"
-          />
-          <h3>Affected decks</h3>
-          <ImpactList items={pending.affected_decks || []} />
-          {!!pending.issues?.length && (
-            <details>
-              <summary>
-                {pending.issues.length} invalid rows in the proposed workbook
-              </summary>
-              {pending.issues.map((r, i) => (
-                <div className="source-issue" key={i}>
-                  <strong>
-                    Input row {r.source_row}: {r.name}
-                  </strong>
-                  <p>{r.message}</p>
-                </div>
-              ))}
-            </details>
-          )}
-          <div className="actions">
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() =>
-                run(
-                  () => api(`/import/${pending.id}/dismiss`, "POST"),
-                  "Import dismissed; inventory preserved",
-                )
-              }
-            >
-              Keep current inventory
-            </button>
-            <button
-              className="button primary"
-              disabled={busy}
-              onClick={() =>
-                run(
-                  () => api(`/import/${pending.id}/apply`, "POST"),
-                  "Complete snapshot applied",
-                )
-              }
-            >
-              Apply complete snapshot
-            </button>
-          </div>
-        </section>
-      )}
-      <section className="review-panel table-panel">
-        <h2>Invalid workbook rows · {review?.rows.length || 0}</h2>
-        <p className="hint">
-          Fix these source cells in Excel, save, and upload again. Unknown
-          quantities are excluded from owned totals.
-        </p>
-        {review?.rows.slice(rp * 20, (rp + 1) * 20).map((r, i) => (
-          <div className="source-issue" key={r.id || i}>
-            <div className="row-number">{r.source_row}</div>
-            <div>
-              <strong>{r.name}</strong>
-              <p>{r.message}</p>
-              <small>
-                Input · Count: {String(r.raw.Count ?? "(blank)")} · Foil:{" "}
-                {String(r.raw.Foil ?? "(blank)")} · Set:{" "}
-                {String(r.raw.Set ?? "(blank)")} · Collector:{" "}
-                {String(r.raw["Set#"] ?? "(blank)")}
-              </small>
-            </div>
-          </div>
-        ))}
-        {review && !review.rows.length && (
-          <p className="positive">No invalid source rows.</p>
-        )}
-        {rowPages > 1 && (
-          <Pagination
-            page={rp}
-            pages={rowPages}
-            setPage={setRowPage}
-            label="Source issue page"
-          />
-        )}
-      </section>
-      <section className="review-panel table-panel">
-        <div className="section-heading">
-          <h2>Printing matches · {review?.matches.length || 0}</h2>
+        <div role="alert" className="notice danger">
+          <span>{error}</span>
           <button
             className="button secondary"
-            disabled={busy || state.price_job.running}
-            onClick={() =>
-              run(
-                () => api("/prices/refresh?force=true", "POST"),
-                "Full collection matching started",
-              )
-            }
+            onClick={() => setRetry((r) => r + 1)}
           >
-            {state.price_job.running && <Loader2 className="spin" size={16} />}{" "}
-            Match or retry with Scryfall
+            Retry review
           </button>
         </div>
-        <p className="hint">
-          Unchecked cards, unavailable printings, identity conflicts, and failed
-          requests are separate states. Every unresolved item is accessible
-          here.
-        </p>
-        <div className="search-row">
-          <input
-            aria-label="Search unresolved printings"
-            placeholder="Name, printing, or Excel row"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <select
-            aria-label="Filter match status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">All unresolved states</option>
-            {Object.entries(statuses)
-              .filter(([k]) => k !== "matched")
-              .map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-          </select>
-        </div>
-        <p>{matches.length} results</p>
-        <div className="match-list">
-          {matches.slice(currentPage * 20, (currentPage + 1) * 20).map((m) => (
-            <div className="match-row" key={m.printing_key}>
-              <div>
-                <strong>{m.name}</strong>
-                <small>
-                  {m.printing_key} · Input rows {m.source_rows}
-                </small>
-                {m.message && <p>{m.message}</p>}
+      )}
+      {!review && !error && <p role="status">Loading review…</p>}
+      {view === "workbook" && (
+        <div>
+          {pending && (
+            <section className="review-panel table-panel">
+              <h2>Review {pending.source}</h2>
+              <p>
+                {pending.before_copies ?? state.summary.copies} current copies →{" "}
+                {pending.copies} proposed known copies across {pending.rows}{" "}
+                rows.
+              </p>
+              <p className="hint">
+                Applying replaces the full Input inventory, including changes
+                outside this search. Deck targets and printing corrections stay
+                saved. Reservations are recalculated and a backup is saved.
+              </p>
+              <label className="search-field">
+                <Search size={18} />
+                <input
+                  aria-label="Search snapshot changes"
+                  placeholder="Search changes"
+                  value={changeQuery}
+                  onChange={(e) => setChangeQuery(e.target.value)}
+                />
+              </label>
+              <div className="table-scroll">
+                <table className="review-changes">
+                  <thead>
+                    <tr>
+                      <th>Change</th>
+                      <th>Card / printing</th>
+                      <th>Finish</th>
+                      <th>Before</th>
+                      <th>After</th>
+                      <th>New Excel rows</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {changes.slice(cp * 20, (cp + 1) * 20).map((c, i) => (
+                      <tr key={i}>
+                        <td data-label="Change">{c.kind || "Reduction"}</td>
+                        <td>
+                          {c.name}
+                          <small>{c.printing_key}</small>
+                        </td>
+                        <td data-label="Finish">{c.finish}</td>
+                        <td data-label="Before">{c.before}</td>
+                        <td data-label="After">{c.after}</td>
+                        <td data-label="Excel rows">
+                          {c.source_rows?.join(", ") || "Removed"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <span className="status-tag">
-                {statuses[m.status] || m.status}
-              </span>
-              <button
-                className="button secondary small"
-                onClick={() => setMatch(m)}
-              >
-                Find printing
-              </button>
+              {!changes.length && (
+                <p>
+                  No quantity or finish changes match. Source annotations or
+                  invalid rows may still differ.
+                </p>
+              )}
+              <Pagination
+                page={cp}
+                pages={changePages}
+                setPage={setChangePage}
+                label="Change page"
+              />
+              <h3>Affected decks</h3>
+              <ImpactList items={pending.affected_decks || []} />
+              {!!pending.issues?.length && (
+                <details>
+                  <summary>
+                    {pending.issues.length} invalid rows in the proposed
+                    workbook
+                  </summary>
+                  {pending.issues.map((r, i) => (
+                    <div className="source-issue" key={i}>
+                      <strong>
+                        Input row {r.source_row}: {r.name}
+                      </strong>
+                      <p>{r.message}</p>
+                    </div>
+                  ))}
+                </details>
+              )}
+              <div className="actions">
+                <button
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () => api(`/import/${pending.id}/dismiss`, "POST"),
+                      "Import dismissed; inventory preserved",
+                    )
+                  }
+                >
+                  Keep current inventory
+                </button>
+                <button
+                  className="button primary"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () => api(`/import/${pending.id}/apply`, "POST"),
+                      "Complete snapshot applied",
+                    )
+                  }
+                >
+                  Apply complete snapshot
+                </button>
+              </div>
+            </section>
+          )}
+          {!pending && (
+            <div className="review-file">
+              <strong>
+                {state.settings.workbook_path || "No workbook imported"}
+              </strong>
+              <p className="hint">
+                Last accepted import: {date(state.last_import?.created_at)}
+              </p>
             </div>
-          ))}
-        </div>
-        {review && !matches.length && (
-          <Empty title="No matches need review in this view" />
-        )}
-        <Pagination
-          page={currentPage}
-          pages={pages}
-          setPage={setPage}
-          label="Matching page"
-        />
-      </section>
-      <section className="review-panel table-panel">
-        <h2>Import history</h2>
-        <div className="history-list">
-          {review?.history
-            .slice(historyPage * 20, (historyPage + 1) * 20)
-            .map((h) => (
-              <div key={h.id}>
-                <strong>{h.source}</strong>
-                <span className="status-tag">{h.status}</span>
-                <small>
-                  {date(h.created_at)} · {h.copies ?? "Unknown"} known copies ·{" "}
-                  {h.rows ?? "Unknown"} rows
-                </small>
-                {h.fingerprint && (
-                  <small title={h.fingerprint}>
-                    Fingerprint: {h.fingerprint.slice(0, 16)}…
-                  </small>
-                )}
+          )}
+          {review && (
+            <section className="review-panel table-panel">
+              <h2>
+                Workbook issues
+                {review.rows.length ? ` · ${review.rows.length}` : ""}
+              </h2>
+              {!!review.rows.length && (
+                <p className="hint">
+                  Fix these rows in Excel, then save and import again. Unknown
+                  quantities are excluded from owned totals.
+                </p>
+              )}
+              {review?.rows.slice(rp * 20, (rp + 1) * 20).map((r, i) => (
+                <div className="source-issue" key={r.id || i}>
+                  <div className="row-number">{r.source_row}</div>
+                  <div>
+                    <strong>{r.name}</strong>
+                    <p>{r.message}</p>
+                    <details>
+                      <summary>Source cells</summary>
+                      <small>
+                        Input · Count: {String(r.raw.Count ?? "(blank)")} ·
+                        Foil: {String(r.raw.Foil ?? "(blank)")} · Set:{" "}
+                        {String(r.raw.Set ?? "(blank)")} · Collector:{" "}
+                        {String(r.raw["Set#"] ?? "(blank)")}
+                      </small>
+                    </details>
+                  </div>
+                </div>
+              ))}
+              {review && !review.rows.length && (
+                <p className="positive">No invalid source rows.</p>
+              )}
+              {rowPages > 1 && (
+                <Pagination
+                  page={rp}
+                  pages={rowPages}
+                  setPage={setRowPage}
+                  label="Source issue page"
+                />
+              )}
+            </section>
+          )}
+          <details className="review-history">
+            <summary>Import history</summary>
+            <section className="review-panel table-panel">
+              <div className="history-list">
+                {review?.history
+                  .slice(historyPage * 20, (historyPage + 1) * 20)
+                  .map((h) => (
+                    <div key={h.id}>
+                      <strong>{h.source}</strong>
+                      <span className="status-tag">{h.status}</span>
+                      <small>
+                        {date(h.created_at)} · {h.copies ?? "Unknown"} known
+                        copies · {h.rows ?? "Unknown"} rows
+                      </small>
+                      {h.fingerprint && (
+                        <small title={h.fingerprint}>
+                          Fingerprint: {h.fingerprint.slice(0, 16)}…
+                        </small>
+                      )}
+                    </div>
+                  ))}
               </div>
-            ))}
+              <Pagination
+                page={historyPage}
+                pages={Math.max(
+                  1,
+                  Math.ceil((review?.history.length || 0) / 20),
+                )}
+                setPage={setHistoryPage}
+                label="Import history page"
+              />
+              <p className="hint">
+                The latest 100 import records are retained. Saved backups
+                contain earlier workspace history.
+              </p>
+            </section>
+          </details>
         </div>
-        <Pagination
-          page={historyPage}
-          pages={Math.max(1, Math.ceil((review?.history.length || 0) / 20))}
-          setPage={setHistoryPage}
-          label="Import history page"
-        />
-        <p className="hint">
-          The latest 100 import records are retained. Saved backups contain
-          earlier workspace history.
-        </p>
-      </section>
+      )}
+      {view === "matching" && (
+        <section className="review-panel table-panel">
+          <div className="section-heading">
+            <h2>
+              Printing matches{review ? ` · ${review.matches.length}` : ""}
+            </h2>
+            <button
+              className="button secondary"
+              disabled={busy || state.price_job.running}
+              onClick={() =>
+                run(
+                  () => api("/prices/refresh?force=true", "POST"),
+                  "Full collection matching started",
+                )
+              }
+            >
+              {state.price_job.running && (
+                <Loader2 className="spin" size={16} />
+              )}{" "}
+              {state.price_job.running
+                ? `Matching ${state.price_job.completed}/${state.price_job.total}`
+                : "Refresh matches"}
+            </button>
+          </div>
+          {state.price_job.error && (
+            <p role="alert" className="notice warning">
+              {state.price_job.error}
+            </p>
+          )}
+          <div className="search-row">
+            <input
+              aria-label="Search unresolved printings"
+              placeholder="Name, printing, or Excel row"
+              value={query}
+              onChange={(e) => updateFilter(e.target.value, status)}
+            />
+            <select
+              aria-label="Filter match status"
+              value={status}
+              onChange={(e) => updateFilter(query, e.target.value)}
+            >
+              <option value="">All unresolved states</option>
+              {Object.entries(statuses)
+                .filter(([k]) => k !== "matched")
+                .map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+            </select>
+          </div>
+          {review && <p className="hint">{matches.length} results</p>}
+          <div
+            className="match-list"
+            ref={resultsRef}
+            tabIndex={-1}
+            role="region"
+            aria-label={`Printing matches, page ${currentPage + 1} of ${pages}`}
+          >
+            {matches
+              .slice(currentPage * 20, (currentPage + 1) * 20)
+              .map((m) => (
+                <div className="match-row" key={m.printing_key}>
+                  <div>
+                    <strong>{m.name}</strong>
+                    <small>
+                      {m.printing_key} · Input rows {m.source_rows}
+                    </small>
+                    {m.message && <p>{m.message}</p>}
+                  </div>
+                  <span className={`status-tag match-status-${m.status}`}>
+                    {statuses[m.status] || m.status}
+                  </span>
+                  <button
+                    className="button secondary small"
+                    onClick={() =>
+                      setMatch({ item: m, revision: state.revision })
+                    }
+                  >
+                    Find printing
+                  </button>
+                </div>
+              ))}
+          </div>
+          {review && !matches.length && (
+            <Empty title="No matches need review in this view" />
+          )}
+          <Pagination
+            page={currentPage}
+            pages={pages}
+            setPage={matchingPage}
+            label="Matching page"
+          />
+        </section>
+      )}
       {match && (
         <MatchDialog
-          item={match}
+          item={match.item}
+          openingRevision={match.revision}
           close={() => setMatch(null)}
           reload={reload}
         />
       )}
-    </>
+    </div>
   );
 }

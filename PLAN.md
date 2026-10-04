@@ -6,7 +6,22 @@ The site version lives on its own GitHub branch, `sites/mtg-vault`, so other too
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
-## Simplification reset — 2026-10-04
+## Simple Review and shared visual language — 2026-10-05
+
+The latest user request restores **Review** alongside **Collection, Decks, and Settings**, while simplifying the whole platform further. This supersedes the three-destination navigation decision in the previous reset. Collection remains the landing page; Overview remains removed.
+
+- Review is one primary destination with two focused views. Workbook shows pending replacement changes and affected decks, source issues, and closed import history. Matching shows one search/status toolbar and a plain list of printings to check. Raw source fields and history details stay subordinate.
+- Uploads open Workbook directly. Settings and set-progress links open the relevant Review view. Older embedded Settings review links redirect to Workbook. Matching search/status survive reload and Back/Forward; pagination returns focus to the results.
+- Use one neutral working background in light/dark, quiet horizontal rules, consistent titles and compact controls. Remove nested card surfaces, inherited shadows/rounded list rows, decorative action/section icons, repeated framing, and large appearance tiles. Light/Dark/System remain a compact text-button group in Settings.
+- Keep loading distinct from confirmed zero source issues and unchecked printings distinct from failed/conflicting matches. A failed review fetch has Retry. Applying always replaces the complete Input snapshot, including changes outside the current search/page; retain explicit consequences, backups, targets, corrections, and guarded writes.
+- Matching dialogs capture their opening revision so a later background refresh cannot allow an old dialog to overwrite a newer correction. Failed workspace actions reveal and focus their error even after scrolling through a long review; pending imports remain intact.
+
+Independent UI and UX critics agreed with the direction. The UI critic approved the flat visual system and four-label mobile navigation. The UX critic independently found the offscreen rejected-Apply message; it was fixed and tested with a long unfiltered snapshot. Validation covers seven browser suites and 38 domain/API checks, including both themes, laptop/mobile widths, 200% text, loading/failure/retry, controlled upload/full-snapshot apply, query navigation, and stale matching confirmation. All test changes use disposable local storage or browser-only fixtures.
+
+Continue within these four sections. No new dashboard, charts, or speculative feature expansion is part of this release.
+
+## Earlier simplification reset — 2026-10-04 (Review placement superseded)
+
 
 The user's request to cut the platform down to **Collection, Decks, and Settings** supersedes the earlier dashboard and navigation roadmap below. This release revamps the working interface on `sites/mtg-vault`; it does not expand the feature backlog.
 

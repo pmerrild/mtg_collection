@@ -50,7 +50,7 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Track wanted',exact=True).click();modal=page.get_by_role('dialog',name='Track a wanted card');modal.get_by_role('button',name='Save tracking record',exact=True).click();modal.wait_for(state='hidden')
  page.get_by_label('Acquisition status for Unowned browser card').select_option('received');page.get_by_label('Acquisition status for Unowned browser card').wait_for()
  state=page.request.get(args.url+'/api/state').json();assert state['summary']['copies']==892
- page.evaluate("location.hash='review'");page.get_by_label('Search unresolved printings').wait_for()
+ page.evaluate("location.hash='review?view=matching'");page.get_by_label('Search unresolved printings').wait_for()
  next_button=page.get_by_role('button',name='Next matching page',exact=True)
  for _ in range(3):next_button.click()
  assert page.get_by_text('Matching page 4 of',exact=False).count()==1
@@ -58,11 +58,11 @@ with sync_playwright() as p:
  page.get_by_role('navigation',name='Main navigation').get_by_role('button',name='Settings',exact=True).click();page.get_by_role('tab',name='Preferences',exact=True).click();page.get_by_label('Display currency').select_option('USD');page.wait_for_timeout(500);page.get_by_label('Display currency').select_option('EUR')
  page.set_viewport_size({'width':390,'height':844});page.get_by_role('navigation').get_by_role('button',name='Collection',exact=True).click();page.get_by_role('heading',name='Collection',exact=True).wait_for()
  assert page.locator('.mobile-card-row').first.bounding_box()['y']<600
- assert page.get_by_role('navigation').get_by_role('button').count()==3
+ assert page.get_by_role('navigation').get_by_role('button').count()==4
  assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
  page.screenshot(path=str(shots/'collection-mobile.png'))
  page.get_by_label('Search collection').fill('Abhorrent Oculus');page.get_by_role('button',name=re.compile('^Abhorrent Oculus')).click();page.get_by_role('dialog',name='Abhorrent Oculus').wait_for();page.keyboard.press('Escape')
- for nav in ['Decks','Settings']:
+ for nav in ['Decks','Review','Settings']:
   page.get_by_role('navigation').get_by_role('button',name=nav,exact=True).click();page.wait_for_timeout(300);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),nav+' overflows'
  page.set_viewport_size({'width':700,'height':1000});page.evaluate("document.documentElement.style.fontSize='32px'");page.get_by_role('navigation').get_by_role('button',name='Collection',exact=True).click();assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),'200% text overflows'
  assert not errors,errors

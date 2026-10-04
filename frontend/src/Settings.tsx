@@ -3,7 +3,6 @@ import { ArrowDownToLine, FileSpreadsheet, RefreshCw } from "lucide-react";
 import type { ViewProps } from "./types";
 import { api, date } from "./ui";
 import { ThemeControl } from "./theme";
-import { Review } from "./Review";
 import { Recovery } from "./Recovery";
 const sections = ["preferences", "data", "recovery"] as const;
 export function Settings({
@@ -21,18 +20,9 @@ export function Settings({
       ? (value as (typeof sections)[number])
       : "preferences";
   });
-  const [reviewOpen, setReviewOpen] = useState(
-    () =>
-      new URLSearchParams(location.hash.split("?")[1] || "").get("review") ===
-      "1",
-  );
   useEffect(() => {
     const sync = () => {
       if (!location.hash.startsWith("#settings")) return;
-      setReviewOpen(
-        new URLSearchParams(location.hash.split("?")[1] || "").get("review") ===
-          "1",
-      );
       const value = new URLSearchParams(location.hash.split("?")[1] || "").get(
         "section",
       );
@@ -49,7 +39,6 @@ export function Settings({
   const [revisions, setRevisions] = useState(false);
   const choose = (value: (typeof sections)[number]) => {
     setSection(value);
-    setReviewOpen(false);
     history.replaceState(null, "", `#settings?section=${value}`);
     document.getElementById("main-content")?.scrollTo({ top: 0 });
   };
@@ -58,9 +47,6 @@ export function Settings({
       <div className="page-heading">
         <div>
           <h1>Settings</h1>
-          <p className="subtitle">
-            Preferences, collection data, and recovery.
-          </p>
         </div>
       </div>
       <div
@@ -158,22 +144,7 @@ export function Settings({
             </div>
           </section>
         )}
-        {section === "data" && reviewOpen && (
-          <div className="settings-review">
-            <a className="text-button" href="#settings?section=data">
-              Back to data settings
-            </a>
-            <Review
-              state={state}
-              run={run}
-              busy={busy}
-              reload={reload}
-              openImport={openImport}
-              embedded
-            />
-          </div>
-        )}
-        {section === "data" && !reviewOpen && (
+        {section === "data" && (
           <div className="settings-data-grid">
             <section className="table-panel settings-section">
               <div className="section-heading">
@@ -206,7 +177,7 @@ export function Settings({
                 Save your workbook, then upload it here. Changes wait for review
                 before replacing the complete Input inventory.
               </p>
-              <a className="text-button" href="#settings?section=data&review=1">
+              <a className="text-button" href="#review?view=workbook">
                 {state.pending_import
                   ? "Review workbook changes"
                   : `Source issues & import history${state.summary.issues ? ` (${state.summary.issues})` : ""}`}
@@ -266,10 +237,7 @@ export function Settings({
                     ? `Refreshing ${state.price_job.completed}/${state.price_job.total}`
                     : "Refresh prices"}
                 </button>
-                <a
-                  className="button secondary"
-                  href="#settings?section=data&review=1"
-                >
+                <a className="button secondary" href="#review?view=matching">
                   Review matches
                 </a>
               </div>
