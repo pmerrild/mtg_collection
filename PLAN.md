@@ -1,10 +1,12 @@
-# MTG collection and deck tracker: proposed implementation
+# MTG collection and deck tracker: implementation plan and UX roadmap
 
-This plan guided the first local implementation in this repository. The app now includes workbook import and watching, collection browsing, durable decklists, missing-card comparisons, Scryfall integration with caching, text/CSV exports, and backups. See the implementation's README.md and VALIDATION.md for startup instructions and verified scope. Live Scryfall access and launch on an actual Mac remain to be checked.
+This plan guided the first local implementation and now includes the roadmap for the private MTG Vault site. The local app includes workbook import and watching, collection browsing, durable decklists, missing-card comparisons, Scryfall integration with caching, text/CSV exports, and backups. The hosted version reuses the interface and runs a Worker backend with D1/R2 persistence and manual workbook uploads. See README.md and VALIDATION.md for the local app, and SITES.md and SITES_VALIDATION.md for the hosted implementation and verified scope. Live Scryfall access and launch of the local app on an actual Mac remain to be checked.
+
+The site version lives on its own GitHub branch, `sites/mtg-vault`, so other tools can work independently of `main`. The private site is https://mtg-vault-collection.peter-nielsen22.chatgpt.site. A GitHub branch update does not automatically publish a new Site version.
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
-## Recommendation
+## Original local-app recommendation
 
 Build a local application that runs on your computer and opens in your browser. Keep Excel as the authoritative collection source. Store intended deck lists, allocation decisions, card matches, and cached Scryfall data in a local SQLite database. Make the first version useful without AI running in the application.
 
@@ -19,13 +21,13 @@ The uploaded `Input` worksheet has an Excel table named `Input`, covering A1:J68
 - 679 populated data rows and 607 distinct name strings.
 - Known Count values sum to 892 copies. One quantity is blank, so 892 is not a verified complete inventory total.
 - All rows have a name, set, and collector number.
-- Foil has 633 blanks, 44 values of 1, and two values of 2. In particular, a Forest row has Count 4 and Foil 2. This suggests a foil-copy count, but your intended meaning must be confirmed.
+- Foil has 633 blanks, 44 values of 1, and two values of 2. In particular, a Forest row has Count 4 and Foil 2. The confirmed convention is a foil-copy count within Count, with blank Foil treated as zero.
 - Five deck labels exist. Cloud, Sephiroth, Angels, and Black Vampires each sum to 60 copies. Ramos Guildgate Commander sums to 19.
 - 21 name/set/collector-number/foil keys occur on multiple rows. Repeated rows may represent separate copies or assignments; they must not be discarded automatically.
 - Row 253 is Plains, with a blank Count and numeric Set value 8. It needs a quantity and confirmation of the edition. Do not silently replace 8 with a guessed Scryfall code.
 - `Collection` is backed by a Power Query connection and contains 652 rows with quantities totaling 1,758. It is a different saved view from `Input`; its totals cannot be substituted for the authoritative input total.
 
-Import `Input` only. Keep all other worksheets untouched. Confirm that `Input` covers everything you want tracked before declaring the import complete.
+Import `Input` only. Keep all other worksheets untouched. Input is confirmed as the full inventory; the invalid row still prevents treating the known quantity total as complete.
 
 ## Ownership and update rules
 
@@ -41,11 +43,13 @@ Begin with one-way synchronization. Editing ownership happens in Excel; editing 
 
 On setup, select or configure the workbook path. Import its saved contents, then watch saves with debouncing and retry handling for Excel's temporary files and locked files. Unsaved edits cannot be observed. Also provide an explicit Refresh button.
 
+The path and watcher workflow above applies to the local app. The hosted site imports uploaded saved workbooks and cannot watch a file on your Mac. Reloading the hosted collection only reloads saved app data; importing a newer workbook requires an upload.
+
 Every import is a complete snapshot, not a batch of extra purchases. Reimporting the same file must leave quantities unchanged. Keep original row values and row numbers for diagnostics; row numbers are not permanent inventory identifiers. Store a content fingerprint and import history. Preview quantity reductions or removed entries before accepting them, especially when they affect allocated cards.
 
 Validate quantities, foil counts, and required columns. Quarantine incomplete rows with a clear explanation rather than assuming a missing Count means 1 or 0. Preserve the last good import if Excel is locked or a read fails. Persist corrections to identity matching separately so they survive future imports of the same source key.
 
-If Foil means the number of foil copies, split each source row into nonfoil = Count − Foil and foil = Foil. Treat a blank as zero only after confirming that convention. Preserve finishes as separate holdings. Additional languages, conditions, etched finishes, and locations can be supported later if you need them.
+Under the confirmed foil-copy convention, split each source row into nonfoil = Count − Foil and foil = Foil, treating blank Foil as zero. Preserve finishes as separate holdings. Additional languages, conditions, etched finishes, and locations can be supported later if you need them.
 
 ## Card matching and valuation
 
@@ -63,7 +67,7 @@ Use a descriptive User-Agent, an Accept header, a queued request limit, caching,
 
 Proposed pricing policy: refresh stale prices once daily while the app runs, with manual refresh available. The application need not download Scryfall's entire bulk dataset for this inventory. Cache results and continue operating when offline, with a visible last-successful-refresh timestamp.
 
-Match the price to the actual printing and finish. EUR and USD are useful display options; choose your preferred currency before implementation. Missing price values are unknown, never zero. Show valuation coverage alongside totals, and identify the source and currency. Scryfall prices are indicative marketplace estimates, not guaranteed sale proceeds or the final price at checkout. Do not claim condition-adjusted valuations from these fields. Add DKK only with an explicit exchange-rate source and timestamp if requested.
+Match the price to the actual printing and finish. EUR is the confirmed initial currency, with USD available in Settings. Missing price values are unknown, never zero. Show valuation coverage alongside totals, and identify the source and currency. Scryfall prices are indicative marketplace estimates, not guaranteed sale proceeds or the final price at checkout. Do not claim condition-adjusted valuations from these fields. Add DKK only with an explicit exchange-rate source and timestamp if requested.
 
 If price history is added later, collect dated snapshots yourself. The ordinary current card response is not a historical price series.
 
@@ -122,15 +126,125 @@ The Collection toolbar should include Search, Filters, Refresh, and Last importe
 
 Design explicit states for an initial import, no decks yet, an incomplete row, unavailable prices, a locked workbook, stale prices, and failed imports. Keep cached data usable and visible during network failures.
 
+## UI/UX review and next-release roadmap — 2026-10-04
+
+The review covered the implementation and local desktop/mobile renders. The desktop layout is orderly, but deck readiness, copy reservations, and data confidence need clearer explanations. Live Scryfall behavior remains unverified. All work in this section is planned unless explicitly described as current behavior.
+
+### 1. Make deck readiness honest and prominent
+
+Current example: Ramos shows `19 / 19 owned`, `Covered`, and a full green progress bar even though the seeded Commander target contains only 19 cards. Format warnings are below the card table. Ownership coverage of entered targets is useful, but it does not establish a complete, ready-to-play deck.
+
+Show four separate states: target-list completeness, collection ownership coverage, availability after reservations, and format checks. Put an incomplete-list warning and important format issues near the deck title. Use text alongside color and keep detailed checks expandable.
+
+Acceptance criteria:
+
+- Ramos cannot appear ready to play while its target list is incomplete or its Commander checks are unresolved.
+- The UI can explain `19 entered targets owned; 81 slots unspecified` without treating the unspecified slots as 81 cards to buy. Exact acquisitions require a confirmed target list.
+- A complete list that is fully owned but blocked by another deck's reservations has a distinct availability state.
+- Summary tiles and deck detail use the same definitions and expose the reason for each status.
+
+### 2. Explain and control copy reservations
+
+The current app calculates copies in other decks, but does not offer a clear priority or transfer workflow. All five seeded decks start reserved at the same priority. A planned reservation also does not prove a card is physically in that deck.
+
+Show which deck reserves each compatible copy, including printing and finish. Add explicit deck priority and a `Move from…` action with a preview of the source deck's resulting shortage. Label planned reservations separately from physical storage or assembly status.
+
+Acceptance criteria:
+
+- A blocked requirement explains the reserving deck, quantity, and relevant printing/finish.
+- Changing priority or moving a reservation shows the impact on all affected decks before saving.
+- Each compatible copy is reserved at most once, and transfers never change owned quantities.
+- Imported Excel Deck annotations and app reservations have distinct labels; neither silently overwrites the other.
+
+### 3. Complete import and card-matching review
+
+Current review emphasizes reductions, and the matching UI shows only the first 50 unresolved items without a way to reach the rest. Import history is stored but not shown. Expand review to additions, removals, quantity and finish changes, invalid rows, and affected decks.
+
+Acceptance criteria:
+
+- Every unresolved item is reachable through a searchable queue with pagination or an equivalent accessible list.
+- Matching states distinguish not yet checked, no match, conflicting identity, and a request that failed and can be retried.
+- Import preview shows before/after counts, nonfoil/foil changes, original Excel row references, quarantined rows, and reservation impacts.
+- An import-history view shows when a snapshot was accepted, its source/fingerprint, and its results. Failed or cancelled imports preserve the last accepted inventory.
+- Reimporting the same complete snapshot does not duplicate holdings; pagination never omits unresolved records.
+
+### 4. Make recovery usable
+
+The hosted app saves backups before inventory replacement and deck deletion, but has no restore interface. Deck edits have no revision history, and closing an editor can lose unsaved work.
+
+Acceptance criteria:
+
+- Users can inspect available backups, validate a selected backup, and preview a restoration's inventory/deck impact before applying it.
+- Restore is atomic, reconciles reservations, and creates a backup of the current state before replacement. Corrupt or incompatible backups leave current data intact.
+- Deck revisions support recovering an earlier list and undoing a deletion or mistaken edit.
+- Closing an editor or navigating away with unsaved changes offers explicit save, discard, or continue-editing choices.
+
+### 5. Improve mobile use and accessibility
+
+At a 390 × 844 viewport, the collection table begins about 720 px down the page and is roughly 998 px wide. No card rows are visible in the first viewport. Navigation also requires horizontal scrolling. Small table-header text has approximately 3.2:1 contrast, and dialogs lack accessible names.
+
+Acceptance criteria:
+
+- Collapse or compact summary statistics on small screens so search and collection content appear early.
+- Provide compact card rows or a mobile detail layout that keeps primary tasks usable without a desktop-width table. Keep all navigation destinations discoverable.
+- Meet WCAG AA contrast for normal text, provide visible keyboard focus and usable touch targets, and give dialogs accessible names, focus management, and keyboard dismissal.
+- Verify collection search, deck inspection/editing, review queues, and recovery at desktop and narrow mobile sizes, including keyboard and screen-reader checks.
+
+### 6. Make deck editing faster
+
+The current editor is primarily a textarea, with card lookup hidden in an expandable area. Keep bulk paste, and add direct editing for ordinary adjustments.
+
+Acceptance criteria:
+
+- Edit quantities in card rows; search/add cards with previews; move cards between main deck, command zone, and sideboard where applicable.
+- Duplicate a deck without changing its source, and show validation feedback immediately as targets or zones change.
+- Preserve printing/finish requirements and reservations through edits; prevent unsaved edits from being lost.
+- Pasting a list presents parsing errors and a reviewable result before replacement.
+
+### 7. Clarify refresh actions and price confidence
+
+The hosted Refresh action currently reports that saved inventory is current; it does not read Excel. Missing prices mainly appear as dashes, with explanations elsewhere in the app.
+
+Acceptance criteria:
+
+- Use distinct actions for `Reload collection`, `Import saved workbook`, and `Refresh prices`, with clear results and timestamps.
+- Explain unknown, stale, and failed price states where users see them. Show priced-copy coverage and unpriced quantities beside collection or acquisition totals.
+- Retain cached prices during failures, and never present an unknown price as zero or imply a partial estimate covers every card.
+
+### Later additions
+
+| Addition | Useful behavior | Dependency |
+| --- | --- | --- |
+| Deck analysis | Mana curve, land counts, color requirements, and card-type distributions | Confirmed target lists and resolved card identities |
+| Physical storage locations | Binder/box/deck labels and a `Where is this card?` view | Separate physical locations from planned reservations |
+| Saved filters | Quickly return to unassigned cards, foils, unresolved cards, or cards needed by a selected deck | Clear assignment and matching-state definitions |
+| Acquisition tracking | Track wanted, ordered, and received cards | Ownership increases only when Excel records receipt; avoid double-counting orders |
+| Artwork browsing | Optional card grid, larger previews, and double-faced-card flipping | Reliable matching, responsive image loading, and accessible alternatives |
+
+### Decisions and constraints to resolve
+
+- **Assignment reconciliation:** define how imported Excel Deck labels inform initial targets and physical-location hints, and how disagreements with app reservations are surfaced. Keep the source annotation visible.
+- **Acquisition-price policy:** decide whether a missing-card estimate uses the cheapest compatible printing, a selected edition, or an explicit finish requirement. State the policy beside estimates; owned-card valuation continues to use the actual printing and finish.
+- **Capacity and growth:** the current hosted importer caps uploads at 4 MiB, expanded workbook content at 24 MiB, and worksheet rows at 20,000. Parsed snapshots are limited to 1.2 MB and saved vault JSON to 1.8 MB. Because each accepted import replaces the full inventory, splitting a workbook into several uploads is not a safe workaround. Design a complete-snapshot growth path and show useful limit errors.
+- **Other-tool and release workflow:** keep this version on `sites/mtg-vault`; document preview, validation, and explicit Site publication. GitHub commits alone do not deploy. Schema changes must preserve existing hosted inventory, decks, matching decisions, and backups, with a migration and recovery plan.
+
+### Recommended sequence
+
+1. Deliver honest deck-readiness states, reservation explanations, complete import/matching review, and restore/undo support. Include mobile and accessibility fixes as release acceptance requirements.
+2. Add explicit reservation transfer/priority controls, faster deck editing, and clearer refresh/price interactions.
+3. Add deck analysis, storage locations, saved filters, acquisition tracking, and optional artwork browsing according to actual use.
+
+Keep AI features behind reliable inventory, confirmed target lists, and dependable recovery. Completion means the acceptance criteria above are verified, not simply that another summary widget has been added.
+
 ## Hosting and integration options
 
 | Option | Fit for your current needs | Tradeoff |
 | --- | --- | --- |
-| Local browser app + SQLite | Recommended | Reads your local workbook; no hosting subscription. Requires your computer to be running and a managed local startup. |
-| Private Sites app + D1/R2 | Good later if you want another device | Built-in private access and hosted persistence. A hosted service cannot automatically read your computer's file; use uploads, a cloud source, or a local uploader. Verify current plan limits and charges. |
+| Local browser app + SQLite | Original local implementation | Reads your local workbook; no hosting subscription. Requires your computer to be running and a managed local startup. |
+| Private Sites app + D1/R2 | Current hosted version on `sites/mtg-vault` | Built-in private access and hosted persistence. Uses manual workbook uploads because it cannot automatically read your computer's file. Verify current plan limits and charges. |
 | Databricks Apps | Technically possible, unnecessary for this scope | More useful if the inventory already participates in an existing Databricks analytics environment. Adds workspace and operational overhead. Genie is an analysis connector, not the tracker itself. |
 
-On Sites, D1 would hold structured data and R2 could hold workbook uploads and backups. The recommended Python backend cannot be deployed unchanged to the Sites Cloudflare Workers runtime. Reuse the UI and data model; port the backend and importer to a Worker-compatible implementation if moving later.
+The hosted version stores structured data in D1 and uploaded workbooks/backups in R2. Its backend and importer have been ported to the Sites Cloudflare Workers runtime; the original Python backend remains the local-app implementation.
 
 Integration findings: plugin discovery returned no Scryfall plugin. Direct API integration remains sufficient. GitHub is already available for source control and review. Figma was found as an optional design plugin; it is unnecessary for one person's first version. SharePoint is a possible future cloud-file source, and Databricks Genie was found for analytics. No additional plugins have been installed or suggested for connection.
 
@@ -149,7 +263,7 @@ Use one lead/integrator and a few bounded roles rather than several agents editi
 
 First agree on the data model and ownership/allocation rules. Then the designer and developer can work in parallel against a shared API contract. Use separate branches/worktrees and file ownership; the lead integrates changes. Keep a single owner for schema changes and dependency changes. Separate Codex agents can perform these roles when implementation is requested; no agents or new chats have been launched for this plan.
 
-Suggested milestones:
+Original local implementation milestones (retain as baseline; use the UX roadmap above for the next hosted release):
 
 1. Validate the file convention and build a reliable, repeatable import into SQLite with a basic collection table.
 2. Resolve printings and add cached card details and finish-correct prices.
@@ -158,4 +272,4 @@ Suggested milestones:
 
 Acceptance checks should prove that reimporting does not duplicate holdings; foil splitting preserves total quantities; unresolved quantities remain flagged; printing mismatches are surfaced; identical cards are not allocated twice; double-faced names resolve correctly; offline price failures retain cached values; and app restart preserves decks. Verify totals against the workbook rather than snapshotting the UI implementation.
 
-Before implementation, confirm your operating system, the meaning of Count/Foil and blank Foil values, whether Input is the complete inventory, what the existing Deck labels mean, and which target decklists and currency to use. These are data and packaging decisions, not a reason to install enterprise infrastructure.
+Operating system, Input authority, Count/Foil semantics, blank Foil handling, and initial currency are confirmed. The remaining product decisions are the completeness of each intended target decklist, assignment reconciliation, reservation priorities, physical-location tracking, and the acquisition-price policy described in the UX roadmap.
