@@ -12,5 +12,6 @@ data/
 *.sqlite3
 .env
 .env.*
+.dev.vars
 tests/fixtures/private-inventory.xlsx
 screenshots/

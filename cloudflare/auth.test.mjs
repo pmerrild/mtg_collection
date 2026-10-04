@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { verifyAccessJwt } from './src/index.ts';
+import { verifyAccessContext, verifyAccessJwt } from './src/index.ts';
 
 const teamDomain = 'vault-team';
 const audience = 'vault-access-audience';
@@ -49,13 +49,26 @@ test('accepts a valid signed token for the configured audience and user', async 
   assert.equal(await verifyAccessJwt(await token(), env, now), true);
 });
 
-test('rejects a token with the wrong audience, expired lifetime, or another user', async () => {
+test('rejects a token with the wrong audience or expired lifetime', async () => {
   assert.equal(await verifyAccessJwt(await token({ aud: ['different-app'] }), env, now), false);
   assert.equal(await verifyAccessJwt(await token({ exp: now }), env, now), false);
-  assert.equal(await verifyAccessJwt(await token({ email: 'other@example.com' }), env, now), false);
+  assert.equal(await verifyAccessJwt(await token({ email: 'another-cloudflare-account@example.com' }), env, now), true);
 });
 
 test('rejects malformed and non-RS256 tokens', async () => {
   assert.equal(await verifyAccessJwt('not-a-jwt', env, now), false);
   assert.equal(await verifyAccessJwt(await token({}, { alg: 'none' }), env, now), false);
+});
+
+test('accepts Cloudflare Worker Access context for the expected audience with a signed-in identity', async () => {
+  const context = {
+    access: {
+      aud: audience,
+      getIdentity: async () => ({ email: 'OWNER@example.com' }),
+    },
+  };
+  assert.equal(await verifyAccessContext(context, env), true);
+  assert.equal(await verifyAccessContext({ access: { ...context.access, aud: 'wrong' } }, env), false);
+  assert.equal(await verifyAccessContext({ access: { ...context.access, getIdentity: async () => ({ email: 'another-cloudflare-account@example.com' }) } }, env), true);
+  assert.equal(await verifyAccessContext({ access: { ...context.access, getIdentity: async () => ({}) } }, env), false);
 });

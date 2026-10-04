@@ -7,16 +7,23 @@
     "directory": "./frontend/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/auth/*"]
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "mtg-vault",
-      "database_id": "local-development-placeholder",
+      "database_id": "08b5741b-2563-4087-9b4f-71ae54b4fc7d",
       "migrations_dir": "cloudflare/migrations"
     }
   ],
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "lingering-violet-c021",
+    "ACCESS_AUD": "5281fcafd933e37f06d7b3a4f030339e45935bb510a956e39e9c55522bbfbd40",
+    "ALLOWED_EMAIL": "peter.nielsen22@gmail.com",
+    "APP_ORIGIN": "https://mtg-vault.merrild-peter.workers.dev",
+    "MS_CLIENT_ID": "e1991217-4f6a-47d9-bb68-e9a6c37ed5b7"
+  },
   "observability": {
     "enabled": true
   }

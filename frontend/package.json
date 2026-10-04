@@ -6,14 +6,14 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "test:cloudflare": "node --experimental-strip-types --test ../cloudflare/auth.test.mjs",
+    "test:cloudflare": "node --experimental-strip-types --test ../cloudflare/*.test.mjs",
     "cloudflare:dev": "wrangler dev --config ../wrangler.jsonc",
     "cloudflare:deploy": "npm run build && wrangler deploy --config ../wrangler.jsonc"
   },
   "dependencies": {
+    "lucide-react": "^0.468.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "lucide-react": "^0.468.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
@@ -22,5 +22,7 @@
     "vite": "^7.2.0",
     "wrangler": "^4.0.0"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }

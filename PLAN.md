@@ -1,6 +1,6 @@
 # MTG collection and deck tracker: implementation plan
 
-The original local implementation described below is complete. This document now records that delivered scope and the next hosted phase. See README.md and VALIDATION.md for current startup instructions and recorded validation. Live Scryfall access and launch on an actual Mac remain to be checked.
+The original local implementation described below is complete. This document records that delivered scope and the next hosted phase. The hosted Worker is live, with Scryfall search, manual bounded card/price sync, and D1-backed read/deck/wishlist/export routes. Launch through the local Mac shortcut was not re-tested during hosted work; see README.md and VALIDATION.md for current instructions and limits.
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
@@ -10,7 +10,7 @@ Confirmed implementation preferences: macOS; Input is the full inventory; Count 
 
 The existing local app provides a React/TypeScript interface, a FastAPI service, and a SQLite database. It imports and watches the Excel `Input` sheet, supports collection browsing and deck editing, calculates missing cards, caches Scryfall data, exports TXT/CSV, and backs up the database. Inventory ownership remains read-only in the app.
 
-On branch `copilot/mtg-vault-collection`, an initial Cloudflare Workers + D1 foundation is also in place: Wrangler configuration, a D1 schema migration, static frontend serving, a database health endpoint, and Cloudflare Access JWT verification for data API paths. Unauthenticated data routes return 401; routes not yet migrated return 501. The local D1 migration, Worker preview, and static/health/auth-boundary responses have been checked. Nothing has been deployed to a Cloudflare account.
+On branch `copilot/mtg-vault-collection`, the Cloudflare Worker serves static assets and validates Cloudflare Access independently from Microsoft identity. Three D1 migrations are applied remotely. Cloudflare Access protects Worker traffic; the account remained on Free during setup. The personal Microsoft account has consented to AppFolder scope, and one workbook is pinned by drive/item ID. A read-only import of that workbook is in D1 (892 known copies, 1 review issue). D1-backed state, collection, issues, deck CRUD, wishlist, Scryfall search/match confirmation, manual 75-item-batched Scryfall sync, and TXT/CSV export routes are implemented and live. Excel writes, automatic/background price refresh, and automatic external-change synchronization remain unimplemented. The Access policy currently includes Cloudflare account members and an Email domain condition containing a full email address; verify only the owner is allowed and use an exact-email selector if needed.
 
 ### Agreed product direction
 
@@ -30,8 +30,8 @@ On branch `copilot/mtg-vault-collection`, an initial Cloudflare Workers + D1 fou
 
 ### Ordered implementation steps
 
-1. **Prepare private Cloudflare deployment.** Configure a real D1 database ID and the production Access team, audience, and allowed email as secrets. Create a Cloudflare Access application protecting the whole site and restrict its policy to the owner's Microsoft identity. Keep `/api/health` non-sensitive; verify every other `/api/*` route remains protected. Do not deploy collection data until the policy is active.
-2. **Add OneDrive authorization.** Implement a separate Microsoft Graph delegated OAuth flow with least-privilege file access and explicit workbook selection. Cloudflare Access login protects the app but does not grant Graph API tokens. Store refresh credentials encrypted with a platform secret; never place them in the browser, D1 plaintext, source control, or chat. Test consent, refresh, revocation, and reconnect.
+1. **Confirm owner-only Access policy.** The D1 resource is created and bound in `wrangler.jsonc`; Access is enabled for this Worker only and all traffic. Keep Cloudflare on Free. Ensure the policy is limited to the owner (account-member login is acceptable only if the Cloudflare account has no other members; prefer an exact-email rule). Do not enter a full email address in an Email domain selector. Verify authenticated requests pass and unauthenticated requests redirect to Access. Never select a paid add-on.
+2. **Complete OneDrive token lifecycle.** Live personal-account consent and encrypted D1 persistence are verified. Add refresh-token rotation, expiry handling, revocation/reconnect, and encrypted key rotation. Cloudflare Access protects app entry; it is separate from Graph API authorization. Never place tokens in the browser, plaintext D1, source control, or chat.
 3. **Establish workbook identity and sync reads.** Back up the workbook, add/preserve the approved hidden stable row ID in the `Input` table, and map imported rows to that ID. Read the workbook through Graph, capture its item ID and eTag, preserve unrelated sheets, and keep the existing last-good inventory if download or parse fails. Verify duplicate rows and workbook formatting on a copy.
 4. **Port collection reads and domain state.** Replace local file paths, file watching, and local SQLite assumptions in the Worker API with Graph-backed workbook reads and D1 queries. Migrate collection state, import history, issues, matches, decks, and entries without losing current semantics. Use Graph change notifications/delta or bounded polling for external Excel edits; do not assume OneDrive can be watched as a local file from Workers.
 5. **Implement conflict-safe inventory writes.** Add validated endpoints to edit Count, Foil, Notes, Deck, add rows, and remove copies. Before a write, fetch the current eTag; edit the target by stable row ID; upload conditionally only if the version is unchanged; then re-read and reconcile D1. If Excel changed first, the upload is locked, or sync is uncertain, preserve both versions and require review instead of overwriting. Keep reduction review for external workbook changes.
@@ -40,7 +40,7 @@ On branch `copilot/mtg-vault-collection`, an initial Cloudflare Workers + D1 fou
 
 ### Blockers and scope
 
-Cloudflare account access and OneDrive consent are not available in this workspace, so production deployment and live Graph checks require the owner to configure the account. The current D1 schema is a starting mapping, not yet a verified migration of a live local database. Do not put credentials in this repository. The hosted app is not yet usable for collection management: all data routes still return 501 after Access validation.
+Cloudflare account access and OneDrive consent were configured for the live deployment. The D1 schema is a hosted starting mapping, not a migration of a local database. Do not put credentials in this repository. The hosted app supports read-only workbook snapshots and D1-backed deck management, but collection ownership is still edited only in Excel; safe conditional workbook writes, external-change sync, and backup/restore remain release blockers.
 
 ## Initial Local-App Plan (Historical)
 
@@ -150,9 +150,8 @@ Use a compact desktop workspace: a narrow left navigation, search at the top of 
 | View | Primary task and content |
 | --- | --- |
 | Collection | Search and filter; show name, edition/number, nonfoil/foil quantities, assignments, unit price, total, and freshness. Open a row for card artwork and details. |
-| Decks | Select a deck; show target size, owned coverage, cards available now, and missing quantities. Add or paste a decklist. |
+| Decks | Select a deck; show target size, owned coverage, cards available now, and a per-card To acquire highlight for copies absent from the collection. Add or paste a decklist. |
 | Deck detail | Card rows with Needed, Owned, Available, In other decks, Missing, and indicative acquisition cost; tabs or filters for zones; Export for Scryfall. |
-| Missing cards | Choose decks; view a combined wishlist with quantities, indicative costs, unpriced entries, and Scryfall text/CSV export. |
 | Import review | Show changed counts, unresolved printings, and invalid source rows with Excel row references. |
 | Settings | Workbook path, Refresh, currency, copy-sharing preference, and data export/backup. |
 
