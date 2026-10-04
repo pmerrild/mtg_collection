@@ -101,3 +101,9 @@ python3 -m unittest discover -s tests -v
 The original workbook acceptance check is optional. Set `MTG_ORIGINAL_WORKBOOK` to its local path to include that fixture-specific test; otherwise it is skipped. Runtime databases and backups stay outside Git.
 
 Optional `MTG_DATA_DIR` chooses a different database directory. Run `python3 run.py --port 8766` if the default port is occupied. See VALIDATION.md for checks performed and remaining limits.
+
+## Cloudflare foundation (incomplete)
+
+`wrangler.jsonc` and `cloudflare/` contain an initial Workers + D1 scaffold. The Worker serves the built frontend and answers `GET /api/health`; other API routes return `501` until they are migrated. Data API paths require a valid Cloudflare Access JWT matching the configured audience and `ALLOWED_EMAIL`. Configure a Cloudflare Access application to protect the site, use Microsoft as its identity provider, and restrict the policy to your account. The Worker verifies the signed assertion itself; do not rely only on an Origin check. The existing FastAPI API and OneDrive workbook synchronization are not implemented in Workers yet. Do not treat this scaffold as a usable hosted collection.
+
+Wrangler 4 requires Node.js 22 or newer. Set `ACCESS_TEAM_DOMAIN` to the Cloudflare Access team slug (without `.cloudflareaccess.com`), `ACCESS_AUD` to the protected application's audience tag, and `ALLOWED_EMAIL` to the one permitted email using `wrangler secret put`. From `frontend/`, `npm run cloudflare:dev` starts the local Worker preview, `npm run test:cloudflare` checks JWT validation, and `npm run cloudflare:deploy` builds and deploys the interface. Before deployment, create a D1 database and replace the local placeholder `database_id` in `wrangler.jsonc`; configure the Access application and identity policy in Cloudflare.

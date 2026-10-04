@@ -1,10 +1,48 @@
-# MTG collection and deck tracker: proposed implementation
+# MTG collection and deck tracker: implementation plan
 
-This plan guided the first local implementation in this repository. The app now includes workbook import and watching, collection browsing, durable decklists, missing-card comparisons, Scryfall integration with caching, text/CSV exports, and backups. See the implementation's README.md and VALIDATION.md for startup instructions and verified scope. Live Scryfall access and launch on an actual Mac remain to be checked.
+The original local implementation described below is complete. This document now records that delivered scope and the next hosted phase. See README.md and VALIDATION.md for current startup instructions and recorded validation. Live Scryfall access and launch on an actual Mac remain to be checked.
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
-## Recommendation
+## Current Status And Next Steps
+
+### Delivered
+
+The existing local app provides a React/TypeScript interface, a FastAPI service, and a SQLite database. It imports and watches the Excel `Input` sheet, supports collection browsing and deck editing, calculates missing cards, caches Scryfall data, exports TXT/CSV, and backs up the database. Inventory ownership remains read-only in the app.
+
+On branch `copilot/mtg-vault-collection`, an initial Cloudflare Workers + D1 foundation is also in place: Wrangler configuration, a D1 schema migration, static frontend serving, a database health endpoint, and Cloudflare Access JWT verification for data API paths. Unauthenticated data routes return 401; routes not yet migrated return 501. The local D1 migration, Worker preview, and static/health/auth-boundary responses have been checked. Nothing has been deployed to a Cloudflare account.
+
+### Agreed product direction
+
+- Edit inventory in the app and in Excel, with app edits written back to the same workbook.
+- Keep the workbook in OneDrive and use Microsoft Graph for hosted reads and writes.
+- Add a hidden stable ID column to the `Input` table so edits target the right source row after sorting or inserting rows.
+- Make the app available from anywhere in a phone, iPad, or Windows browser; only the owner needs an account, and free hosting is preferred when it meets persistence and availability needs.
+- Evaluate Cloudflare Sites/Workers with D1 for the hosted app and database, and R2 for backups. Keep the existing React UI where practical, but adapt the backend: local FastAPI paths, file watching, and SQLite files cannot be deployed unchanged.
+
+### Agreed product direction
+
+- Edit collection ownership in both the app and Excel; app edits write back to the same workbook.
+- Keep the workbook in OneDrive and use Microsoft Graph for hosted reads and writes.
+- Add a hidden stable ID column to the `Input` table so edits survive sorting and inserted rows.
+- Support access from anywhere in phone, iPad, and Windows browsers; only the owner needs an account; prefer free hosting when it meets persistence and availability requirements.
+- Use Cloudflare Workers for the hosted application/API, D1 for structured application data, and optionally R2 for backups. Do not sync database files between devices.
+
+### Ordered implementation steps
+
+1. **Prepare private Cloudflare deployment.** Configure a real D1 database ID and the production Access team, audience, and allowed email as secrets. Create a Cloudflare Access application protecting the whole site and restrict its policy to the owner's Microsoft identity. Keep `/api/health` non-sensitive; verify every other `/api/*` route remains protected. Do not deploy collection data until the policy is active.
+2. **Add OneDrive authorization.** Implement a separate Microsoft Graph delegated OAuth flow with least-privilege file access and explicit workbook selection. Cloudflare Access login protects the app but does not grant Graph API tokens. Store refresh credentials encrypted with a platform secret; never place them in the browser, D1 plaintext, source control, or chat. Test consent, refresh, revocation, and reconnect.
+3. **Establish workbook identity and sync reads.** Back up the workbook, add/preserve the approved hidden stable row ID in the `Input` table, and map imported rows to that ID. Read the workbook through Graph, capture its item ID and eTag, preserve unrelated sheets, and keep the existing last-good inventory if download or parse fails. Verify duplicate rows and workbook formatting on a copy.
+4. **Port collection reads and domain state.** Replace local file paths, file watching, and local SQLite assumptions in the Worker API with Graph-backed workbook reads and D1 queries. Migrate collection state, import history, issues, matches, decks, and entries without losing current semantics. Use Graph change notifications/delta or bounded polling for external Excel edits; do not assume OneDrive can be watched as a local file from Workers.
+5. **Implement conflict-safe inventory writes.** Add validated endpoints to edit Count, Foil, Notes, Deck, add rows, and remove copies. Before a write, fetch the current eTag; edit the target by stable row ID; upload conditionally only if the version is unchanged; then re-read and reconcile D1. If Excel changed first, the upload is locked, or sync is uncertain, preserve both versions and require review instead of overwriting. Keep reduction review for external workbook changes.
+6. **Add the collection editor.** Expose row provenance where necessary, including duplicate source rows. Provide save, syncing, conflict, and failure states, and refresh shared state after a successful write. Keep ownership separate from app-owned deck targets and allocations.
+7. **Harden, back up, and validate release.** Enforce same-origin mutation checks in addition to Access identity; apply request/body limits and security headers. Configure D1 backups and use R2 only for backup artifacts, not as the live workbook or database. Test app-to-Excel and Excel-to-app round trips, eTag conflicts, duplicate IDs, locked/syncing files, restarts, restore, and phone/tablet/Windows layouts. Run Python tests, Worker auth tests, frontend build, local D1 migration, and hosted checks after account access is configured.
+
+### Blockers and scope
+
+Cloudflare account access and OneDrive consent are not available in this workspace, so production deployment and live Graph checks require the owner to configure the account. The current D1 schema is a starting mapping, not yet a verified migration of a live local database. Do not put credentials in this repository. The hosted app is not yet usable for collection management: all data routes still return 501 after Access validation.
+
+## Initial Local-App Plan (Historical)
 
 Build a local application that runs on your computer and opens in your browser. Keep Excel as the authoritative collection source. Store intended deck lists, allocation decisions, card matches, and cached Scryfall data in a local SQLite database. Make the first version useful without AI running in the application.
 

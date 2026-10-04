@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mtg-vault",
+  "main": "cloudflare/src/index.ts",
+  "compatibility_date": "2026-10-04",
+  "assets": {
+    "directory": "./frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mtg-vault",
+      "database_id": "local-development-placeholder",
+      "migrations_dir": "cloudflare/migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
