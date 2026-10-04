@@ -1,3 +1,5 @@
+> Hosted version: this branch is `sites/mtg-vault`. See [SITES.md](SITES.md) for the private Site, hosted upload workflow, and development instructions. The local app instructions below apply to the original application retained from `main`.
+
 # MTG Vault
 
 A local Magic: The Gathering collection and deck workspace, built from PLAN.md. Excel remains your ownership source; decks, card matches, and cached prices are saved in SQLite.

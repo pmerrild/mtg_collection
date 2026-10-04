@@ -13,3 +13,8 @@ data/
 .env.*
 tests/fixtures/private-inventory.xlsx
 screenshots/
+dist/
+frontend/dist/
+.wrangler/
+.sites-runtime/
+seed.json

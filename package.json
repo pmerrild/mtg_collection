@@ -1,0 +1,21 @@
+{
+  "name": "mtg-vault-sites",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix frontend run build && node scripts/build.mjs",
+    "db:generate": "drizzle-kit generate",
+    "test": "node tests/hosted.test.mjs"
+  },
+  "dependencies": {
+    "xlsx": "0.18.5",
+    "fflate": "0.8.2",
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "drizzle-kit": "0.31.10",
+    "wrangler": "4.92.0"
+  }
+}
