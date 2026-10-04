@@ -1,3 +1,4 @@
+import { filterCollection } from "../shared/collection.mjs";
 import {
   Inventory,
   freshState,
@@ -441,21 +442,27 @@ async function stage(env, s, revision, p, raw) {
   };
 }
 function csv(rows) {
+  const trade = rows.some((c) => c.owned_quantity !== undefined);
   const columns = [
     "name",
     "quantity",
     "printing_key",
     "finish",
-    "nonfoil",
-    "foil",
+    trade ? "owned_nonfoil" : "nonfoil",
+    trade ? "owned_foil" : "foil",
     "zone",
     "decks",
     "notes",
     "source_rows",
-    "value",
-    "priced_copies",
+    trade ? "owned_value" : "value",
+    trade ? "owned_priced_copies" : "priced_copies",
     "fetched_at",
     "location",
+    "owned_quantity",
+    "reserved",
+    "target_protected",
+    "keep",
+    "tradeable",
   ];
   const cell = (v) => {
     if (Array.isArray(v)) v = v.join("; ");
@@ -494,9 +501,21 @@ export default {
           throw Error("Request is too large.");
         return JSON.parse(text || "{}");
       };
+      if (path === "/export" && method === "POST") {
+        const data = await body();
+        if (
+          !data ||
+          typeof data !== "object" ||
+          Array.isArray(data) ||
+          Object.values(data).some((v) => typeof v !== "string")
+        )
+          throw Error("Invalid export options.");
+        for (const [key, value] of Object.entries(data)) q.set(key, value);
+      }
       if (
-        method === "GET" &&
-        ["/state", "/collection", "/wishlist", "/export"].includes(path)
+        (method === "GET" &&
+          ["/state", "/collection", "/wishlist", "/export"].includes(path)) ||
+        (path === "/export" && method === "POST")
       ) {
         const cards = await cardRows(env),
           inv = new Inventory(s, cards);
@@ -565,30 +584,34 @@ export default {
         const kind = q.get("kind") || "collection",
           zone = q.get("zone") || "all";
         let rows;
-        if (kind === "collection")
-          rows = inv
-            .collection()
-            .filter(
-              (c) =>
-                normalized(
-                  `${c.name} ${c.set_code} ${c.card_type} ${c.location}`,
-                ).includes(normalized(q.get("q") || "")) &&
-                (!q.get("color") || c.color.includes(q.get("color"))) &&
-                (!q.get("type") || c.card_type.includes(q.get("type"))) &&
-                (q.get("foil") !== "true" || c.foil > 0) &&
-                (!q.get("location") ||
-                  normalized(c.location).includes(
-                    normalized(q.get("location")),
-                  )) &&
-                (!q.get("status") ||
-                  (q.get("status") === "unresolved" &&
-                    c.match_status !== "matched") ||
-                  (q.get("status") === "unreserved" &&
-                    c.reserved < c.quantity)) &&
-                (!q.get("deck_id") ||
-                  c.needed_by.includes(Number(q.get("deck_id")))),
-            );
-        else if (kind === "deck")
+        if (kind === "collection") {
+          rows = filterCollection(inv.collection(), Object.fromEntries(q));
+          if (q.get("keys")) {
+            const keys = JSON.parse(q.get("keys"));
+            if (
+              !Array.isArray(keys) ||
+              keys.length > 1000 ||
+              keys.some((k) => typeof k !== "string")
+            )
+              throw Error("Invalid export selection.");
+            const selected = new Set(keys);
+            rows = rows.filter((c) => selected.has(c.key));
+            if (rows.length !== selected.size)
+              throw Error(
+                "Selected printings changed. Reload and review the selection.",
+              );
+          }
+          if (q.get("view") === "trade")
+            rows = rows.map((c) => ({
+              ...c,
+              owned_quantity: c.quantity,
+              owned_nonfoil: c.nonfoil,
+              owned_foil: c.foil,
+              owned_value: c.value,
+              owned_priced_copies: c.priced_copies,
+              quantity: c.tradeable,
+            }));
+        } else if (kind === "deck")
           rows = inv
             .deck(Number(q.get("deck_id")))
             .entries.filter((e) => zone === "all" || zone === e.zone);

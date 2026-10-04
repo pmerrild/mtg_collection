@@ -185,36 +185,75 @@ export function ExportDialog({
 }) {
   const [zone, setZone] = useState("all"),
     [text, setText] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [format, setFormat] = useState("txt");
   useEffect(() => {
     const controller = new AbortController();
     setText("");
     setError("");
-    fetch("/api/export?" + new URLSearchParams({ ...params, zone }), {
-      signal: controller.signal,
-    })
+    const options = { ...params, zone, format };
+    fetch(
+      params.keys
+        ? "/api/export"
+        : "/api/export?" + new URLSearchParams(options),
+      {
+        signal: controller.signal,
+        ...(params.keys
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(options),
+            }
+          : {}),
+      },
+    )
       .then(async (r) => {
-        if (!r.ok) throw new Error("Could not prepare this export.");
+        if (!r.ok) {
+          const error = await r.json();
+          throw new Error(
+            error.detail || error.error || "Could not prepare this export.",
+          );
+        }
         setText(await r.text());
       })
       .catch((e) => {
         if (e.name !== "AbortError") setError(e.message);
       });
     return () => controller.abort();
-  }, [params, zone]);
+  }, [params, zone, format]);
   const download = () => {
     const url = URL.createObjectURL(
-        new Blob([text], { type: "text/plain;charset=utf-8" }),
+        new Blob([text], {
+          type:
+            format === "csv"
+              ? "text/csv;charset=utf-8"
+              : "text/plain;charset=utf-8",
+        }),
       ),
       link = document.createElement("a");
     link.href = url;
-    link.download = `${params.kind}-${zone}.txt`;
+    link.download = `${params.kind}-${params.view === "trade" ? "trade-candidates" : zone}.${format}`;
     link.click();
     URL.revokeObjectURL(url);
   };
   return (
     <Dialog title="Export for Scryfall" close={close}>
-      <p>Paste this quantity-and-name list into Scryfall’s deck importer.</p>
+      <p>
+        {params.view === "trade"
+          ? "Exporting suggested trade quantities. Review protection and finishes before trading."
+          : "TXT combines card names for Scryfall’s deck importer; CSV retains printing details."}
+      </p>
+      <label className="field">
+        File format
+        <select
+          aria-label="Export file format"
+          value={format}
+          onChange={(e) => setFormat(e.target.value)}
+        >
+          <option value="txt">TXT for Scryfall</option>
+          <option value="csv">CSV with printing details</option>
+        </select>
+      </label>
       {params.kind === "deck" && (
         <label className="field">
           Zone

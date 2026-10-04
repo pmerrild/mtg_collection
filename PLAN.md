@@ -6,6 +6,19 @@ The site version lives on its own GitHub branch, `sites/mtg-vault`, so other too
 
 Confirmed implementation preferences: macOS; Input is the full inventory; Count includes all copies; Foil is the number of foil copies within Count. EUR is the initial display currency and can be changed to USD in Settings.
 
+## Collection workflow release — 2026-10-04
+
+Implemented on the dedicated `sites/mtg-vault` branch:
+
+- Advanced filters combine groups with AND. Colors and card types support any/all selection; sets and rarities support multiple selections. Quantity, lowest known owned-finish unit price, and known printing-value ranges are available. Finish, reservation coverage, exact matching status, price coverage, deck requirement, and location remain independent filters.
+- Removable active-filter chips, printing/copy counts, bookmarkable collection URLs, and saved views including sort. Legacy foil/unresolved/unreserved saved views still work. Price limits exclude unknown values; known zero prices remain valid. Numeric range errors are visible. Mobile filters scroll in a bounded panel with a result button.
+- Select a page or all matching results (up to 1,000 printings), keep selections across pagination, review selected printings, then export TXT/CSV, replace storage locations, set a keep minimum, or add wanted acquisition records. Changing filters or sort clears selection. Bulk writes validate the entire selection and opening revision before one atomic save. They never change owned quantities.
+- Duplicates include identical cards across printings, using matched identity when available. Trade candidates protect current reservations and an allocation across every saved deck target, including inactive decks. If any target for a card remains short, every copy of that identity stays protected to allow rearrangement. A per-printing minimum defaults to one; candidates equal owned minus the larger of deck protection or that minimum. A minimum can exceed current ownership without inventing copies.
+- Trade TXT/CSV exports use candidate quantities. CSV labels owned finish counts and owned valuation explicitly. Trade candidates are suggestions: unspecified deck slots, future plans, condition, exact finishes to retain, and physical card movements still need review.
+- Keep preferences persist in full backups and gain an empty default when restoring older backups. The SQL schema, private sharing, and Excel ownership convention remain unchanged.
+
+Next work should improve real-data completeness: correct and reimport the invalid Plains source row after confirming its quantity/edition; enter and confirm complete deck targets; validate live Scryfall matching/prices in the running site. After that, add reconciliation between workbook Deck annotations and app reservations, and explicit per-deck physical assembly status if useful. These items require actual inventory/target information and are not inferred from the imported labels.
+
 ## Original local-app recommendation
 
 Build a local application that runs on your computer and opens in your browser. Keep Excel as the authoritative collection source. Store intended deck lists, allocation decisions, card matches, and cached Scryfall data in a local SQLite database. Make the first version useful without AI running in the application.

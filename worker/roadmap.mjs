@@ -1,3 +1,4 @@
+import { normalizeFilters } from "../shared/collection.mjs";
 import {
   Inventory,
   freshState,
@@ -23,6 +24,7 @@ export function upgrade(s) {
   s.schema_version = 2;
   s.reservations ??= [];
   s.locations ??= {};
+  s.keep_preferences ??= {};
   s.saved_filters ??= [];
   s.acquisitions ??= [];
   s.next_deck_id = Math.max(
@@ -223,15 +225,26 @@ export function validateBackup(raw) {
   for (const [k, v] of Object.entries(s.locations))
     if (typeof v !== "string" || v.length > 150)
       throw Error("Backup locations are invalid.");
-  for (const f of s.saved_filters)
+  if (
+    !s.keep_preferences ||
+    typeof s.keep_preferences !== "object" ||
+    Array.isArray(s.keep_preferences) ||
+    Object.values(s.keep_preferences).some((n) => !integer(n, 0, 100000))
+  )
+    throw Error("Backup keep preferences are invalid.");
+  for (const f of s.saved_filters) {
     if (
+      !f ||
       typeof f.id !== "string" ||
       typeof f.name !== "string" ||
       !f.filters ||
       typeof f.filters !== "object" ||
+      Array.isArray(f.filters) ||
       Object.values(f.filters).some((v) => typeof v !== "string")
     )
       throw Error("Backup filters are invalid.");
+    normalizeFilters(f.filters);
+  }
   for (const a of s.acquisitions)
     if (
       typeof a.id !== "string" ||
@@ -622,6 +635,59 @@ export async function handleRoadmap({
     await save(env, s, rev);
     return json({ id: d?.id, updated: true });
   }
+  if (path === "/collection/bulk" && method === "POST") {
+    version();
+    const data = await body();
+    if (
+      !Array.isArray(data.keys) ||
+      !data.keys.length ||
+      data.keys.length > 1000 ||
+      data.keys.some((k) => typeof k !== "string") ||
+      new Set(data.keys).size !== data.keys.length
+    )
+      throw Error("Select between 1 and 1,000 distinct printings.");
+    const rows = new Map(
+      new Inventory(s, await cardRows(env)).collection().map((c) => [c.key, c]),
+    );
+    const selected = data.keys.map((k) => rows.get(k));
+    if (selected.some((c) => !c))
+      throw Error(
+        "A selected printing is no longer in this collection. Reload and select again.",
+      );
+    if (data.action === "location") {
+      if (typeof data.location !== "string" || data.location.length > 150)
+        throw Error("Enter a location of up to 150 characters.");
+      for (const c of selected) s.locations[c.key] = data.location.trim();
+    } else if (data.action === "keep") {
+      if (!integer(data.keep, 0, 100000))
+        throw Error("Enter a whole keep quantity from 0 to 100,000.");
+      for (const c of selected) s.keep_preferences[c.key] = data.keep;
+    } else if (data.action === "acquisition") {
+      if (
+        !integer(data.quantity, 1, 100000) ||
+        !["any", "nonfoil", "foil"].includes(data.finish) ||
+        typeof data.notes !== "string" ||
+        data.notes.length > 300 ||
+        s.acquisitions.length + selected.length > 500
+      )
+        throw Error(
+          "Enter a positive quantity and finish; up to 500 acquisition records are supported.",
+        );
+      for (const c of selected)
+        s.acquisitions.push({
+          id: crypto.randomUUID(),
+          name: c.name,
+          quantity: data.quantity,
+          printing_key: c.printing_key,
+          finish: data.finish === "any" ? null : data.finish,
+          status: "wanted",
+          notes: data.notes.trim(),
+          updated_at: stamp(),
+        });
+    } else throw Error("Choose a bulk action.");
+    await save(env, s, rev);
+    return json({ updated: true, count: selected.length });
+  }
   if (path === "/locations" && method === "PATCH") {
     version();
     const data = await body();
@@ -639,6 +705,7 @@ export async function handleRoadmap({
     return json({ updated: true });
   }
   if (path === "/filters" && method === "POST") {
+    version();
     const data = await body();
     if (
       typeof data.name !== "string" ||
@@ -651,20 +718,7 @@ export async function handleRoadmap({
       throw Error(
         "Save up to 20 filters, each with a name of up to 60 characters.",
       );
-    const allowed = [
-      "q",
-      "color",
-      "type",
-      "foil",
-      "status",
-      "deck_id",
-      "location",
-    ];
-    const filters = Object.fromEntries(
-      allowed
-        .filter((k) => data.filters[k] !== undefined)
-        .map((k) => [k, String(data.filters[k]).slice(0, 200)]),
-    );
+    const filters = normalizeFilters(data.filters);
     s.saved_filters.push({
       id: crypto.randomUUID(),
       name: data.name.trim(),

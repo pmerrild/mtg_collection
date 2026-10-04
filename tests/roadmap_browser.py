@@ -12,6 +12,9 @@ with sync_playwright() as p:
  for d in existing['decks']:
   if d['name']=='Roadmap browser deck':
    latest=page.request.get(args.url+'/api/state').json();page.request.delete(args.url+'/api/decks/'+str(d['id']),headers={'X-Vault-Revision':str(latest['revision'])})
+ for acquisition in existing['acquisitions']:
+  if acquisition['name']=='Unowned browser card':
+   latest=page.request.get(args.url+'/api/state').json();page.request.delete(args.url+'/api/acquisitions/'+acquisition['id'],headers={'X-Vault-Revision':str(latest['revision'])})
  page.reload();page.get_by_role('heading',name='Collection',exact=True).wait_for()
  search=page.get_by_label('Search collection');search.fill('Abhorrent Oculus')
  page.get_by_role('button',name=re.compile('^Abhorrent Oculus')).click()
@@ -54,7 +57,7 @@ with sync_playwright() as p:
  page.get_by_label('Filter match status').select_option('unresolved');page.get_by_label('Search unresolved printings').fill('Sol Ring')
  page.get_by_role('navigation').get_by_role('button',name='Settings',exact=True).click();page.get_by_label('Display currency').select_option('USD');page.wait_for_timeout(500);page.get_by_label('Display currency').select_option('EUR')
  page.set_viewport_size({'width':390,'height':844});page.get_by_role('navigation').get_by_role('button',name='Collection',exact=True).click();page.get_by_role('heading',name='Collection',exact=True).wait_for()
- assert page.locator('.mobile-card-row').first.bounding_box()['y']<500
+ assert page.locator('.mobile-card-row').first.bounding_box()['y']<600
  assert page.get_by_role('navigation').get_by_role('button').count()==5
  assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
  page.screenshot(path=str(shots/'collection-mobile.png'))

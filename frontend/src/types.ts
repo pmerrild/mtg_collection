@@ -98,6 +98,10 @@ export type Card = {
   reserved: number;
   needed_by: number[];
   location: string;
+  keep: number;
+  identity_copies: number;
+  target_protected: number;
+  tradeable: number;
 };
 export type Change = {
   name: string;

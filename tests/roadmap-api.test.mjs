@@ -277,18 +277,16 @@ test("A write racing with a restore leaves inventory and cached cards intact", a
   reset();
   const backup = await good("/backup");
   const preview = await good("/restore/preview", "POST", { backup });
-  sql
-    .prepare("INSERT INTO cards (id,payload,fetched_at) VALUES (?,?,?)")
-    .run(
-      "live-cache",
-      JSON.stringify({
-        id: "live-cache",
-        name: "Current card",
-        set: "abc",
-        collector_number: "1",
-      }),
-      new Date().toISOString(),
-    );
+  sql.prepare("INSERT INTO cards (id,payload,fetched_at) VALUES (?,?,?)").run(
+    "live-cache",
+    JSON.stringify({
+      id: "live-cache",
+      name: "Current card",
+      set: "abc",
+      collector_number: "1",
+    }),
+    new Date().toISOString(),
+  );
   onPut = (key) => {
     if (key.startsWith("backups/")) {
       const s = state();
@@ -336,4 +334,131 @@ test("Received acquisitions never change ownership; saved views and locations pe
   assert.equal((await good("/collection"))[0].location, "Binder A");
   const exported = await request("/export?kind=collection&location=elsewhere");
   assert.equal(await exported.text(), "");
+});
+
+test("Bulk actions validate the whole selection, reject stale writes, persist keep preferences, and leave ownership unchanged", async () => {
+  reset();
+  const key = (await good("/collection"))[0].key;
+  const holdings = JSON.stringify(state().holdings);
+  assert.equal(
+    (
+      await request("/collection/bulk", "POST", {
+        keys: [key, "missing"],
+        action: "location",
+        location: "A",
+      })
+    ).status,
+    400,
+  );
+  assert.deepEqual(state().locations, {});
+  assert.equal(
+    (
+      await request("/collection/bulk", "POST", {
+        keys: [key, key],
+        action: "keep",
+        keep: 0,
+      })
+    ).status,
+    400,
+  );
+  const before = revision();
+  await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "location",
+    location: "Bulk binder",
+  });
+  assert.equal(
+    (
+      await request(
+        "/collection/bulk",
+        "POST",
+        { keys: [key], action: "keep", keep: 0 },
+        before,
+      )
+    ).status,
+    409,
+  );
+  assert.equal((await good("/collection"))[0].keep, 1);
+  await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "keep",
+    keep: 0,
+  });
+  assert.equal((await good("/collection"))[0].tradeable, 1);
+  await good("/collection/bulk", "POST", {
+    keys: [key],
+    action: "acquisition",
+    quantity: 2,
+    finish: "foil",
+    notes: "Another copy",
+  });
+  assert.equal(state().acquisitions[0].quantity, 2);
+  assert.equal(state().acquisitions[0].finish, "foil");
+  assert.equal(state().acquisitions[0].printing_key, "cmm:1");
+  assert.equal(JSON.stringify(state().holdings), holdings);
+  const backup = await good("/backup");
+  assert.equal(backup.state.keep_preferences[key], 0);
+  const restored = (await import("../worker/roadmap.mjs")).validateBackup(
+    backup,
+  );
+  assert.equal(restored.state.keep_preferences[key], 0);
+});
+test("Advanced saved views and selected TXT/CSV exports share filter semantics; trade export uses candidate rather than owned quantity", async () => {
+  reset();
+  const s = state();
+  s.holdings[0].quantity = 4;
+  sql.prepare("UPDATE vault SET payload=? WHERE id=1").run(JSON.stringify(s));
+  const key = (await good("/collection"))[0].key;
+  const filters = {
+    quantity_min: "2",
+    sets: "cmm,other",
+    type: "Artifact",
+    match: "unresolved",
+    reservation: "none",
+    sort: "quantity",
+  };
+  await good("/filters", "POST", { name: "Duplicates", filters });
+  assert.equal(state().saved_filters[0].filters.sort, "quantity");
+  const txt = await request(
+    "/export?" + new URLSearchParams({ kind: "collection", ...filters }),
+  );
+  assert.equal((await txt.text()).trim(), "4 Sol Ring");
+  assert.equal(
+    await (await request("/export?kind=collection&quantity_min=5")).text(),
+    "",
+  );
+  const trade = await request("/export", "POST", {
+    kind: "collection",
+    keys: JSON.stringify([key]),
+    view: "trade",
+  });
+  assert.equal((await trade.text()).trim(), "3 Sol Ring");
+  const csv = await request("/export", "POST", {
+    kind: "collection",
+    keys: JSON.stringify([key]),
+    view: "trade",
+    format: "csv",
+  });
+  const csvText = await csv.text();
+  assert.match(csvText, /"owned_quantity"/);
+  assert.match(csvText, /"Sol Ring","3"/);
+  assert.equal(
+    (
+      await request("/export", "POST", {
+        kind: "collection",
+        keys: JSON.stringify(["missing"]),
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/filters", "POST", {
+        name: "Invalid",
+        filters: { quantity_min: "5", quantity_max: "1" },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(state().saved_filters.length, 1);
 });

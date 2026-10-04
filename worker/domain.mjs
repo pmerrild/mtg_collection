@@ -79,6 +79,7 @@ export const freshState = () => ({
   schema_version: 2,
   reservations: [],
   locations: {},
+  keep_preferences: {},
   saved_filters: [],
   acquisitions: [],
   settings: {
@@ -410,16 +411,65 @@ export class Inventory {
             finish: h.finish,
           });
       }
+    // Protect the union of current reservations and an allocation across every
+    // saved deck target, including inactive decks. Keep preferences are a total
+    // minimum, so overlap with deck protection does not double-count copies.
+    const byHolding = (allocation) => {
+      const result = new Map();
+      for (const rows of allocation.values())
+        for (const [id, n] of rows) result.set(id, (result.get(id) || 0) + n);
+      return result;
+    };
+    const identityCopies = new Map();
+    for (const h of this.holdings)
+      identityCopies.set(
+        h.identity,
+        (identityCopies.get(h.identity) || 0) + h.quantity,
+      );
+    const activeCopies = byHolding(allocated);
+    const allTargets = this.allocate(new Set(this.decks.map((d) => d.id)));
+    const targetCopies = byHolding(allTargets);
+    // A constrained target can remain short when priority consumed its finish.
+    // Preserve every copy of that identity rather than offering alternatives
+    // that could satisfy a flexible target after a reservation rearrangement.
+    const shortIdentities = new Set(
+      this.entries
+        .filter(
+          (e) =>
+            (allTargets.get(e.id) || []).reduce((n, p) => n + p[1], 0) <
+            e.quantity,
+        )
+        .map((e) => e.identity),
+    );
     return [...groups.values()]
       .map((c) => {
         const artwork = this.card(c.printing_key),
           holdings = groupHoldings.get(c.key),
           requirements = this.entriesByIdentity.get(holdings[0].identity) || [];
+        const targetProtected = shortIdentities.has(holdings[0].identity)
+          ? c.quantity
+          : holdings.reduce(
+              (n, h) =>
+                n +
+                Math.max(
+                  activeCopies.get(h.id) || 0,
+                  targetCopies.get(h.id) || 0,
+                ),
+              0,
+            );
         return {
           ...c,
           value: c.priced_copies ? Math.round(c.value * 100) / 100 : null,
           reserved: c.reservations.reduce((n, r) => n + r.quantity, 0),
           location: this.s.locations?.[c.key] || "",
+          identity_copies: identityCopies.get(holdings[0].identity),
+          keep: this.s.keep_preferences?.[c.key] ?? 1,
+          target_protected: targetProtected,
+          tradeable: Math.max(
+            0,
+            c.quantity -
+              Math.max(this.s.keep_preferences?.[c.key] ?? 1, targetProtected),
+          ),
           needed_by: [
             ...new Set(
               requirements
