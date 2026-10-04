@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { verifyAccessJwt } from './src/index.ts';
+import worker, { verifyAccessJwt } from './src/index.ts';
 
 const teamDomain = 'vault-team';
 const audience = 'vault-access-audience';
@@ -58,4 +58,57 @@ test('rejects a token with the wrong audience, expired lifetime, or another user
 test('rejects malformed and non-RS256 tokens', async () => {
   assert.equal(await verifyAccessJwt('not-a-jwt', env, now), false);
   assert.equal(await verifyAccessJwt(await token({}, { alg: 'none' }), env, now), false);
+});
+
+test('keeps health public and adds security headers to API and static responses', async () => {
+  const app = {
+    DB: { prepare: () => ({ first: async () => 1 }) },
+    ASSETS: { fetch: async () => new Response('app', { headers: { 'Content-Type': 'text/html' } }) },
+  };
+  const health = await worker.fetch(new Request('https://vault.example/api/health'), app);
+  assert.equal(health.status, 200);
+  assert.equal(health.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(health.headers.get('X-Frame-Options'), 'DENY');
+  assert.equal(health.headers.get('Content-Security-Policy')?.includes("frame-ancestors 'none'"), true);
+
+  const asset = await worker.fetch(new Request('https://vault.example/'), app);
+  assert.equal(asset.status, 200);
+  assert.equal(asset.headers.get('Referrer-Policy'), 'no-referrer');
+});
+
+test('rejects oversized API request bodies', async () => {
+  const response = await worker.fetch(new Request('https://vault.example/api/decks', {
+    method: 'POST',
+    headers: { 'Content-Length': String(1024 * 1024 + 1) },
+    body: 'x'.repeat(1024 * 1024 + 1),
+  }), {});
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { detail: 'Request body exceeds the 1 MiB limit.' });
+});
+
+test('caps streamed API bodies and still requires same-origin mutations', async () => {
+  const assertion = await token();
+  const app = {
+    ...env,
+    DB: { prepare: () => ({ first: async () => 1 }) },
+    ASSETS: { fetch: async () => new Response('app') },
+  };
+  const tooLarge = new Request('https://vault.example/api/decks', {
+    method: 'POST',
+    headers: {
+      'Cf-Access-Jwt-Assertion': assertion,
+      Origin: 'https://vault.example',
+    },
+    body: 'x'.repeat(1024 * 1024 + 1),
+  });
+  const oversizedResponse = await worker.fetch(tooLarge, app);
+  assert.equal(oversizedResponse.status, 413);
+
+  const crossOrigin = new Request('https://vault.example/api/decks', {
+    method: 'POST',
+    headers: { 'Cf-Access-Jwt-Assertion': assertion, Origin: 'https://attacker.example' },
+    body: '{}',
+  });
+  const crossOriginResponse = await worker.fetch(crossOrigin, app);
+  assert.equal(crossOriginResponse.status, 403);
 });

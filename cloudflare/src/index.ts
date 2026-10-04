@@ -34,13 +34,64 @@ interface AccessClaims {
   email: string;
 }
 
+const MAX_API_BODY_BYTES = 1024 * 1024;
 const keyCache = new Map<string, { expiresAt: number; keys: AccessJwk[] }>();
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, {
     status,
-    headers: { 'Cache-Control': 'no-store' },
+    headers: securityHeaders({ 'Cache-Control': 'no-store' }),
   });
+}
+
+function securityHeaders(initial?: HeadersInit): Headers {
+  const headers = new Headers(initial);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  headers.set(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://cards.scryfall.io; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+  );
+  return headers;
+}
+
+function secure(response: Response): Response {
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: securityHeaders(response.headers),
+  });
+}
+
+async function boundedBody(request: Request): Promise<Request | null> {
+  if (!request.body) return request;
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_API_BODY_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const headers = new Headers(request.headers);
+  headers.delete('Content-Length');
+  return new Request(request, { headers, body });
 }
 
 function decodeBase64Url(value: string): Uint8Array {
@@ -111,6 +162,11 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/')) {
+      const contentLength = request.headers.get('Content-Length');
+      if (contentLength !== null && Number(contentLength) > MAX_API_BODY_BYTES) {
+        return json({ detail: 'Request body exceeds the 1 MiB limit.' }, 413);
+      }
+
       const assertion = request.headers.get('Cf-Access-Jwt-Assertion');
       if (!assertion || !(await verifyAccessJwt(assertion, env))) {
         return json({ detail: 'Sign in through the configured private access policy.' }, 401);
@@ -119,9 +175,15 @@ export default {
         && request.headers.get('Origin') !== url.origin) {
         return json({ detail: 'Cross-origin requests are not allowed.' }, 403);
       }
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        const requestWithBoundedBody = await boundedBody(request);
+        if (!requestWithBoundedBody) {
+          return json({ detail: 'Request body exceeds the 1 MiB limit.' }, 413);
+        }
+      }
       return json({ detail: 'This hosted API route has not been migrated yet.' }, 501);
     }
 
-    return env.ASSETS.fetch(request);
+    return secure(await env.ASSETS.fetch(request));
   },
 };

@@ -12,6 +12,8 @@ The existing local app provides a React/TypeScript interface, a FastAPI service,
 
 On branch `copilot/mtg-vault-collection`, an initial Cloudflare Workers + D1 foundation is also in place: Wrangler configuration, a D1 schema migration, static frontend serving, a database health endpoint, and Cloudflare Access JWT verification for data API paths. Unauthenticated data routes return 401; routes not yet migrated return 501. The local D1 migration, Worker preview, and static/health/auth-boundary responses have been checked. Nothing has been deployed to a Cloudflare account.
 
+The Worker scaffold now also applies security headers to API and static responses, rejects API request bodies larger than 1 MiB, and requires a matching same-origin `Origin` for mutations. This hardens the perimeter but does not make the unmigrated API routes usable.
+
 ### Agreed product direction
 
 - Edit inventory in the app and in Excel, with app edits written back to the same workbook.
@@ -36,7 +38,7 @@ On branch `copilot/mtg-vault-collection`, an initial Cloudflare Workers + D1 fou
 4. **Port collection reads and domain state.** Replace local file paths, file watching, and local SQLite assumptions in the Worker API with Graph-backed workbook reads and D1 queries. Migrate collection state, import history, issues, matches, decks, and entries without losing current semantics. Use Graph change notifications/delta or bounded polling for external Excel edits; do not assume OneDrive can be watched as a local file from Workers.
 5. **Implement conflict-safe inventory writes.** Add validated endpoints to edit Count, Foil, Notes, Deck, add rows, and remove copies. Before a write, fetch the current eTag; edit the target by stable row ID; upload conditionally only if the version is unchanged; then re-read and reconcile D1. If Excel changed first, the upload is locked, or sync is uncertain, preserve both versions and require review instead of overwriting. Keep reduction review for external workbook changes.
 6. **Add the collection editor.** Expose row provenance where necessary, including duplicate source rows. Provide save, syncing, conflict, and failure states, and refresh shared state after a successful write. Keep ownership separate from app-owned deck targets and allocations.
-7. **Harden, back up, and validate release.** Enforce same-origin mutation checks in addition to Access identity; apply request/body limits and security headers. Configure D1 backups and use R2 only for backup artifacts, not as the live workbook or database. Test app-to-Excel and Excel-to-app round trips, eTag conflicts, duplicate IDs, locked/syncing files, restarts, restore, and phone/tablet/Windows layouts. Run Python tests, Worker auth tests, frontend build, local D1 migration, and hosted checks after account access is configured.
+7. **Harden, back up, and validate release.** The Worker now enforces same-origin mutation checks in addition to Access identity, applies a 1 MiB API body limit, and adds security headers. Still configure D1 backups and use R2 only for backup artifacts, not as the live workbook or database. Test app-to-Excel and Excel-to-app round trips, eTag conflicts, duplicate IDs, locked/syncing files, restarts, restore, and phone/tablet/Windows layouts. Run Python tests, Worker auth tests, frontend build, local D1 migration, and hosted checks after account access is configured.
 
 ### Blockers and scope
 
